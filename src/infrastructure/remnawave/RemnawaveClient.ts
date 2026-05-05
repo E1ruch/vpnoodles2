@@ -89,7 +89,10 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ username }, 'Finding Remnawave user by username');
 
     try {
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/by-username/${username}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+        'GET',
+        `/api/users/by-username/${username}`,
+      );
       const user = raw.response;
       logger.info({ username, uuid: user.uuid }, 'Remnawave user found by username');
       return user.uuid;
@@ -113,18 +116,25 @@ export class RemnawaveClient implements IRemnawaveService {
       trafficLimitBytes?: number;
       trafficLimitStrategy?: 'NO_RESET' | 'DAY' | 'MONTH';
       expireAt?: Date;
+      deviceLimit?: number;
     },
   ): Promise<string> {
     const logger = getLogger();
     // PostgreSQL bigint может возвращать строку, поэтому принудительно конвертируем в число
     const numericTelegramId = Number(telegramId);
-    logger.info({ telegramId: numericTelegramId, username, tag, activeInternalSquads, options }, 'Creating Remnawave user');
+    logger.info(
+      { telegramId: numericTelegramId, username, tag, activeInternalSquads, options },
+      'Creating Remnawave user',
+    );
 
     return this.withRetry(async () => {
       // Сначала проверяем, существует ли уже пользователь с таким username
       const existingUuid = await this.findUserByUsername(`tg_${numericTelegramId}`);
       if (existingUuid) {
-        logger.info({ remnawaveUserId: existingUuid }, 'Remnawave user already exists, returning existing UUID');
+        logger.info(
+          { remnawaveUserId: existingUuid },
+          'Remnawave user already exists, returning existing UUID',
+        );
         return existingUuid;
       }
 
@@ -133,9 +143,11 @@ export class RemnawaveClient implements IRemnawaveService {
         status: 'ACTIVE',
         trafficLimitBytes: options?.trafficLimitBytes ?? 0,
         trafficLimitStrategy: options?.trafficLimitStrategy ?? 'NO_RESET',
-        expireAt: options?.expireAt?.toISOString() ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expireAt:
+          options?.expireAt?.toISOString() ??
+          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         telegramId: numericTelegramId,
-        hwidDeviceLimit: 1,
+        hwidDeviceLimit: options?.deviceLimit ?? 1,
         description: `Telegram user: ${username || numericTelegramId}`,
         tag,
         activeInternalSquads,
@@ -189,7 +201,10 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId }, 'Getting subscription URL');
 
     return this.withRetry(async () => {
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+        'GET',
+        `/api/users/${remnawaveUserId}`,
+      );
       const response = raw.response;
 
       // Remnawave returns subscription URL in the user object
@@ -236,7 +251,10 @@ export class RemnawaveClient implements IRemnawaveService {
 
     await this.withRetry(async () => {
       // First get current user to read expireAt
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+        'GET',
+        `/api/users/${remnawaveUserId}`,
+      );
       const currentUser = raw.response;
 
       const currentExpiry = new Date(currentUser.expireAt);
@@ -270,7 +288,10 @@ export class RemnawaveClient implements IRemnawaveService {
 
     await this.withRetry(async () => {
       // Сначала получаем текущего пользователя для получения username
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+        'GET',
+        `/api/users/${remnawaveUserId}`,
+      );
       const currentUser = raw.response;
 
       const payload: RemnawaveUpdateUserPayload = {

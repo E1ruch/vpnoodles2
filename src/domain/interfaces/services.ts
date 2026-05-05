@@ -11,6 +11,7 @@ export interface IRemnawaveService {
       trafficLimitBytes?: number;
       trafficLimitStrategy?: 'NO_RESET' | 'DAY' | 'MONTH';
       expireAt?: Date;
+      deviceLimit?: number;
     },
   ): Promise<string>;
   deleteUser(remnawaveUserId: string): Promise<void>;

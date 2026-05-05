@@ -52,7 +52,10 @@ export class PurchasePlanUseCase {
       const existingPlan = await this.planRepo.findById(existingSub.planId);
       if (existingPlan && existingPlan.type === 'trial') {
         // Если это бесплатный тариф - запоминаем remnawaveUserId для апгрейда
-        logger.info({ userId, existingSubId: existingSub.id }, 'Upgrading trial subscription to paid');
+        logger.info(
+          { userId, existingSubId: existingSub.id },
+          'Upgrading trial subscription to paid',
+        );
         existingRemnawaveUserId = existingSub.remnawaveUserId;
         // Деактивируем старую подписку в БД
         await this.subscriptionRepo.update(existingSub.id, { status: 'expired' });
@@ -107,10 +110,10 @@ export class PurchasePlanUseCase {
         user.username ?? `user_${user.telegramId}`,
         tag,
         activeInternalSquads,
+        {
+          deviceLimit: plan.deviceLimit,
+        },
       );
-
-      // Set device limit
-      await this.remnawaveService.updateDeviceLimit(remnawaveUserId, plan.deviceLimit);
     }
 
     const startDate = new Date();

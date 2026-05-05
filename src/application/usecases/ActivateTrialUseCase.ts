@@ -57,6 +57,7 @@ export class ActivateTrialUseCase {
         trafficLimitBytes,
         trafficLimitStrategy,
         expireAt,
+        deviceLimit: trialPlan.deviceLimit,
       },
     );
 
