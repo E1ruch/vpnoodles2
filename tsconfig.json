@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": true,
+    "types": ["jest", "node"],
+    "baseUrl": "./src",
+    "paths": {
+      "@shared/*": ["shared/*"],
+      "@domain/*": ["domain/*"],
+      "@application/*": ["application/*"],
+      "@infrastructure/*": ["infrastructure/*"],
+      "@transport/*": ["transport/*"],
+      "@app/*": ["app/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
