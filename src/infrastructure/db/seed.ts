@@ -25,7 +25,7 @@ async function seed(): Promise<void> {
           isActive: true,
           sortOrder: 0,
           remnawaveTag: 'TRIAL',
-          description: '7 дней бесплатного VPN, 2 устройства',
+          description: '14 дней бесплатного VPN, 2 устройства',
         }),
       );
       logger.info('Trial plan seeded');

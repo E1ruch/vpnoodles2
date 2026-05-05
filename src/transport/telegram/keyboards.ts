@@ -22,7 +22,7 @@ export function planSelectionKeyboard(): InlineKeyboardMarkup {
 
   buttons.push([{ text: '🆓 Бесплатный тариф', callback_data: 'plan_trial' }]);
   buttons.push([{ text: '💎 Платные тарифы', callback_data: 'plan_paid' }]);
-  buttons.push([{ text: '◀️ Назад', callback_data: 'back_main' }]);
+  buttons.push([{ text: 'Назад', callback_data: 'back_main' }]);
 
   return { inline_keyboard: buttons };
 }
@@ -35,7 +35,7 @@ export function paidPlansKeyboard(plans: Plan[]): InlineKeyboardMarkup {
     },
   ]);
 
-  buttons.push([{ text: '◀️ Назад', callback_data: 'plans' }]);
+  buttons.push([{ text: 'Назад', callback_data: 'plans' }]);
 
   return { inline_keyboard: buttons };
 }
@@ -51,7 +51,7 @@ export function vpnActionsKeyboard(
   }
 
   buttons.push([{ text: '📖 Инструкция', callback_data: 'instructions' }]);
-  buttons.push([{ text: '◀️ Назад', callback_data: 'back_main' }]);
+  buttons.push([{ text: 'Назад', callback_data: 'back_main' }]);
 
   return { inline_keyboard: buttons };
 }
@@ -60,13 +60,13 @@ export function trialConfirmKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [{ text: '✅ Активировать бесплатный тариф', callback_data: 'activate_trial' }],
-      [{ text: '◀️ Назад', callback_data: 'plans' }],
+      [{ text: 'Назад', callback_data: 'plans' }],
     ],
   };
 }
 
 export function backToMainKeyboard(): InlineKeyboardMarkup {
   return {
-    inline_keyboard: [[{ text: '◀️ В главное меню', callback_data: 'back_main' }]],
+    inline_keyboard: [[{ text: 'В главное меню', callback_data: 'back_main' }]],
   };
 }
