@@ -1,6 +1,7 @@
 import type { VpnCredentials, PaymentResult, PaymentProvider } from '../../shared/types/index.js';
 
 export interface IRemnawaveService {
+  findUserByUsername(username: string): Promise<string | null>;
   createUser(
     telegramId: number,
     username: string,

@@ -88,10 +88,14 @@ export class BotHandlers {
 
       const sub = await this.getSubscription.execute(userId);
 
+      const firstName = user?.firstName ?? telegramUser.first_name ?? 'Пользователь';
+
       if (sub) {
-        await ctx.reply(Texts.WELCOME_BACK, { reply_markup: mainMenuKeyboard() });
+        const welcomeText = Texts.WELCOME_BACK_NAME.replace('{firstName}', firstName);
+        await ctx.reply(welcomeText, { reply_markup: mainMenuKeyboard() });
       } else {
-        await ctx.reply(Texts.WELCOME, { reply_markup: planSelectionKeyboard(hasUsedTrial) });
+        const welcomeText = Texts.WELCOME.replace('{firstName}', firstName);
+        await ctx.reply(welcomeText, { reply_markup: planSelectionKeyboard(hasUsedTrial) });
       }
     } catch (err) {
       logger.error({ err }, 'Error in /start handler');
@@ -107,9 +111,11 @@ export class BotHandlers {
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user) return;
 
-      const hasUsedTrial = user.hasUsedTrial;
-      await ctx.editMessageText(Texts.WELCOME_BACK, {
-        reply_markup: planSelectionKeyboard(hasUsedTrial),
+      const firstName = user.firstName ?? telegramUser.first_name ?? 'Пользователь';
+      const welcomeText = Texts.WELCOME_BACK_NAME.replace('{firstName}', firstName);
+      
+      await ctx.editMessageText(welcomeText, {
+        reply_markup: mainMenuKeyboard(),
       });
     } catch {
       // If edit fails, try sending new message
@@ -299,7 +305,7 @@ export class BotHandlers {
       const sub = await this.getSubscription.execute(user.id);
       const status = sub ? (sub.isExpired ? 'Не активно' : 'Активно') : 'Нет подписки';
 
-      const text = Texts.PROFILE.replace('{userId}', user.id.slice(0, 8) + '...')
+      const text = Texts.PROFILE.replace('{telegramId}', String(user.telegramId))
         .replace('{firstName}', user.firstName ?? 'Не указано')
         .replace('{status}', status)
         .replace('{regDate}', formatDate(user.createdAt));
@@ -336,12 +342,13 @@ export class BotHandlers {
 
       // Show plans for renewal
       const plans = await this.planRepo.findByType('paid');
-      await ctx.editMessageText('Выберите тариф для продления:', {
+      await ctx.editMessageText(Texts.RENEW_CHOOSE_PLAN, {
         reply_markup: paidPlansKeyboard(plans),
+        parse_mode: 'Markdown',
       });
     } catch (err) {
       logger.error({ err }, 'Error in renew handler');
-      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard(), parse_mode: 'Markdown' });
     }
   };
 }

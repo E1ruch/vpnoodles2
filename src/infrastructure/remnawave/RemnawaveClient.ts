@@ -5,6 +5,11 @@ import { sleep } from '../../shared/utils/index.js';
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 
 // Remnawave API response types
+// API возвращает ответы в формате { response: ... }
+interface RemnawaveApiResponse<T> {
+  response: T;
+}
+
 interface RemnawaveUser {
   uuid: string;
   shortUuid: string;
@@ -77,6 +82,26 @@ export class RemnawaveClient implements IRemnawaveService {
     this.timeoutMs = env.REMNAWAVE_TIMEOUT_MS;
   }
 
+  async findUserByUsername(username: string): Promise<string | null> {
+    const logger = getLogger();
+    logger.info({ username }, 'Finding Remnawave user by username');
+
+    try {
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/by-username/${username}`);
+      const user = raw.response;
+      logger.info({ username, uuid: user.uuid }, 'Remnawave user found by username');
+      return user.uuid;
+    } catch (error) {
+      // Если пользователь не найден (404), возвращаем null
+      if (error instanceof RemnawaveError && error.message.includes('404')) {
+        logger.info({ username }, 'Remnawave user not found by username (404)');
+        return null;
+      }
+      logger.error({ error, username }, 'Error finding user by username');
+      throw error;
+    }
+  }
+
   async createUser(
     telegramId: number,
     username: string,
@@ -84,18 +109,27 @@ export class RemnawaveClient implements IRemnawaveService {
     activeInternalSquads: string[],
   ): Promise<string> {
     const logger = getLogger();
-    logger.info({ telegramId, username, tag, activeInternalSquads }, 'Creating Remnawave user');
+    // PostgreSQL bigint может возвращать строку, поэтому принудительно конвертируем в число
+    const numericTelegramId = Number(telegramId);
+    logger.info({ telegramId: numericTelegramId, username, tag, activeInternalSquads }, 'Creating Remnawave user');
 
     return this.withRetry(async () => {
+      // Сначала проверяем, существует ли уже пользователь с таким username
+      const existingUuid = await this.findUserByUsername(`tg_${numericTelegramId}`);
+      if (existingUuid) {
+        logger.info({ remnawaveUserId: existingUuid }, 'Remnawave user already exists, returning existing UUID');
+        return existingUuid;
+      }
+
       const payload: RemnawaveCreateUserPayload = {
-        username: `tg_${telegramId}`,
+        username: `tg_${numericTelegramId}`,
         status: 'ACTIVE',
         trafficLimitBytes: 0,
         trafficLimitStrategy: 'NO_RESET',
         expireAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        telegramId,
+        telegramId: numericTelegramId,
         hwidDeviceLimit: 1,
-        description: `Telegram user: ${username || telegramId}`,
+        description: `Telegram user: ${username || numericTelegramId}`,
         tag,
         activeInternalSquads,
       };
@@ -148,10 +182,10 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId }, 'Getting subscription URL');
 
     return this.withRetry(async () => {
-      const response = await this.request<RemnawaveUser>('GET', `/api/users/${remnawaveUserId}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const response = raw.response;
 
       // Remnawave returns subscription URL in the user object
-      // If not present, construct from shortUuid
       if (response.subscriptionUrl) {
         return response.subscriptionUrl;
       }
@@ -195,7 +229,8 @@ export class RemnawaveClient implements IRemnawaveService {
 
     await this.withRetry(async () => {
       // First get current user to read expireAt
-      const currentUser = await this.request<RemnawaveUser>('GET', `/api/users/${remnawaveUserId}`);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const currentUser = raw.response;
 
       const currentExpiry = new Date(currentUser.expireAt);
       const newExpiry = new Date(
