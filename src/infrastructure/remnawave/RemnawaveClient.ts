@@ -153,7 +153,12 @@ export class RemnawaveClient implements IRemnawaveService {
         activeInternalSquads,
       };
 
-      const response = await this.request<RemnawaveUser>('POST', '/api/users', payload);
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+        'POST',
+        '/api/users',
+        payload,
+      );
+      const response = raw.response;
 
       logger.info({ remnawaveUserId: response.uuid }, 'Remnawave user created');
       return response.uuid;
