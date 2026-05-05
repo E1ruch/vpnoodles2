@@ -54,14 +54,16 @@ interface RemnawaveCreateUserPayload {
 }
 
 interface RemnawaveUpdateUserPayload {
+  uuid?: string;
   username?: string;
   status?: string;
   trafficLimitBytes?: number;
   trafficLimitStrategy?: string;
   expireAt?: string;
-  description?: string;
+  description?: string | null;
   tag?: string;
   telegramId?: number | null;
+  email?: string | null;
   hwidDeviceLimit?: number;
   activeInternalSquads?: string[];
   externalSquadUuid?: string | null;
@@ -250,6 +252,44 @@ export class RemnawaveClient implements IRemnawaveService {
         { remnawaveUserId, days, newExpiry: newExpiry.toISOString() },
         'User subscription extended',
       );
+    });
+  }
+
+  async upgradeUser(
+    remnawaveUserId: string,
+    options: {
+      tag: string;
+      deviceLimit: number;
+      trafficLimitBytes: number;
+      trafficLimitStrategy: 'NO_RESET' | 'DAY' | 'MONTH';
+      expireAt: Date;
+    },
+  ): Promise<void> {
+    const logger = getLogger();
+    logger.info({ remnawaveUserId, options }, 'Upgrading user to paid plan');
+
+    await this.withRetry(async () => {
+      // Сначала получаем текущего пользователя для получения username
+      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>('GET', `/api/users/${remnawaveUserId}`);
+      const currentUser = raw.response;
+
+      const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
+        tag: options.tag,
+        hwidDeviceLimit: options.deviceLimit,
+        trafficLimitBytes: options.trafficLimitBytes,
+        trafficLimitStrategy: options.trafficLimitStrategy,
+        expireAt: options.expireAt.toISOString(),
+        status: 'ACTIVE',
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
+        description: currentUser.description,
+        activeInternalSquads: currentUser.activeInternalSquads,
+        externalSquadUuid: currentUser.externalSquadUuid,
+      };
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
+      logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
     });
   }
 

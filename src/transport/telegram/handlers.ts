@@ -8,7 +8,7 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { isAppError } from '../../shared/errors/index.js';
-import { formatDate } from '../../shared/utils/index.js';
+import { formatDate, formatCurrency } from '../../shared/utils/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import { Texts } from './texts.js';
 import {
@@ -19,6 +19,7 @@ import {
   trialConfirmKeyboard,
   backToMainKeyboard,
 } from './keyboards.js';
+import { YooKassaService } from '../../infrastructure/payments/YooKassaService.js';
 
 export class BotHandlers {
   private bot: Telegraf;
@@ -29,6 +30,7 @@ export class BotHandlers {
   private userRepo: IUserRepository;
   private planRepo: IPlanRepository;
   private qrCodeService: IQRCodeService;
+  private yooKassaService: YooKassaService;
 
   constructor(
     bot: Telegraf,
@@ -48,6 +50,7 @@ export class BotHandlers {
     this.userRepo = userRepo;
     this.planRepo = planRepo;
     this.qrCodeService = qrCodeService;
+    this.yooKassaService = new YooKassaService();
   }
 
   register(): void {
@@ -63,6 +66,11 @@ export class BotHandlers {
     this.bot.action('support', this.handleSupport);
     this.bot.action(/^buy_(.+)$/, this.handleBuyPlan);
     this.bot.action(/^renew_(.+)$/, this.handleRenew);
+    this.bot.action(/^pay_(stars|yookassa)_(.+)$/, this.handlePaymentMethod);
+
+    // Telegram Stars payment handlers
+    this.bot.on('pre_checkout_query', this.handlePreCheckout);
+    this.bot.on('successful_payment', this.handleSuccessfulPayment);
 
     // Global error handler
     this.bot.catch((err) => {
@@ -117,7 +125,6 @@ export class BotHandlers {
         reply_markup: mainMenuKeyboard(),
       });
     } catch {
-      // If edit fails, try sending new message
       await ctx.reply(Texts.WELCOME_BACK, { reply_markup: mainMenuKeyboard() });
     }
   };
@@ -242,28 +249,99 @@ export class BotHandlers {
       if (!cbData || !('data' in cbData) || !cbData.data) return;
       const planId = cbData.data.replace('buy_', '');
 
-      const user = await this.userRepo.findByTelegramId(telegramUser.id);
-      if (!user) return;
+      const plan = await this.planRepo.findById(planId);
+      if (!plan) {
+        await ctx.reply('Тариф не найден.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
 
-      const result = await this.purchasePlan.execute(user.id, planId, 'stars');
+      logger.info({ planId, planName: plan.name }, 'Showing payment options');
 
-      await ctx.editMessageText(Texts.PAYMENT_SUCCESS);
+      // Показываем выбор способа оплаты
+      const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
-      const qrCode = await this.qrCodeService.generateBase64(result.subscriptionUrl);
-      const qrBase64 = qrCode.split(',')[1] ?? '';
-      await ctx.replyWithPhoto(
-        { source: Buffer.from(qrBase64, 'base64') },
-        { caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl) },
+      // Telegram Stars (если цена указана)
+      if (plan.priceStars > 0) {
+        buttons.push([{ text: `⭐ Telegram Stars (${plan.priceStars})`, callback_data: `pay_stars_${planId}` }]);
+      }
+
+      // YooKassa (если настроена)
+      if (this.yooKassaService.isConfigured()) {
+        buttons.push([{ text: `💳 Картой (${formatCurrency(plan.priceRub)})`, callback_data: `pay_yookassa_${planId}` }]);
+      }
+
+      buttons.push([{ text: '◀️ Назад', callback_data: 'plan_paid' }]);
+
+      await ctx.editMessageText(
+        `💳 Выберите способ оплаты для тарифа "${plan.name}":\n\n` +
+        `📅 Срок: ${plan.durationDays} дней\n` +
+        `📱 Устройств: до ${plan.deviceLimit}`,
+        { reply_markup: { inline_keyboard: buttons } }
       );
-      await ctx.reply(Texts.INSTRUCTIONS, { reply_markup: backToMainKeyboard() });
     } catch (err) {
-      logger.error({ err }, 'Error buying plan');
-      if (isAppError(err)) {
-        if (err.code === 'SUBSCRIPTION_ERROR') {
-          await ctx.reply(Texts.ERROR_ALREADY_ACTIVE, { reply_markup: backToMainKeyboard() });
-          return;
+      logger.error({ err }, 'Error showing payment options');
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handlePaymentMethod = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const cbData = ctx.callbackQuery;
+      if (!cbData || !('data' in cbData) || !cbData.data) return;
+
+      // Parse: pay_stars_planId или pay_yookassa_planId
+      const match = cbData.data.match(/^pay_(stars|yookassa)_(.+)$/);
+      if (!match) return;
+
+      const provider = match[1];
+      const planId = match[2];
+
+      if (!planId) return;
+
+      const plan = await this.planRepo.findById(planId);
+      if (!plan) {
+        await ctx.reply('Тариф не найден.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user || !user.id) return;
+
+      if (provider === 'stars') {
+        // Telegram Stars инвойс
+        await ctx.replyWithInvoice({
+          title: plan.name,
+          description: `Подписка на ${plan.durationDays} дней. До ${plan.deviceLimit} устройств.`,
+          payload: `plan_${planId}`,
+          currency: 'XTR',
+          prices: [{ label: plan.name, amount: plan.priceStars }],
+          provider_token: '',
+        });
+      } else if (provider === 'yookassa') {
+        // YooKassa платёж
+        const result = await this.yooKassaService.createPayment({
+          userId: user.id,
+          planId: planId,
+          planName: plan.name,
+          amount: plan.priceRub,
+          currency: 'RUB',
+          description: `VPN ${plan.name} - ${plan.durationDays} дней`,
+        });
+
+        if (result.url) {
+          await ctx.reply(
+            `💳 Для оплаты перейдите по ссылке:\n\n${result.url}\n\n` +
+            `После оплаты подписка активируется автоматически.`,
+            { reply_markup: backToMainKeyboard() }
+          );
         }
       }
+    } catch (err) {
+      logger.error({ err }, 'Error processing payment method');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };
@@ -334,7 +412,6 @@ export class BotHandlers {
 
       const cbData = ctx.callbackQuery;
       if (!cbData || !('data' in cbData) || !cbData.data) return;
-      const subscriptionId = cbData.data.replace('renew_', '');
 
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user) return;
@@ -348,6 +425,54 @@ export class BotHandlers {
     } catch (err) {
       logger.error({ err }, 'Error in renew handler');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard(), parse_mode: 'Markdown' });
+    }
+  };
+
+  private handlePreCheckout = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      await ctx.answerPreCheckoutQuery(true);
+    } catch (err) {
+      logger.error({ err }, 'Error in pre_checkout');
+      await ctx.answerPreCheckoutQuery(false, 'Ошибка обработки платежа');
+    }
+  };
+
+  private handleSuccessfulPayment = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const payment = ctx.message;
+      if (!payment || !('successful_payment' in payment)) return;
+
+      const payload = payment.successful_payment.invoice_payload;
+      const planId = payload.replace('plan_', '');
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const result = await this.purchasePlan.execute(user.id, planId, 'stars');
+
+      await ctx.reply(Texts.PAYMENT_SUCCESS);
+
+      const qrCode = await this.qrCodeService.generateBase64(result.subscriptionUrl);
+      const qrBase64 = qrCode.split(',')[1] ?? '';
+      await ctx.replyWithPhoto(
+        { source: Buffer.from(qrBase64, 'base64') },
+        { caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl) },
+      );
+      await ctx.reply(Texts.INSTRUCTIONS, { reply_markup: backToMainKeyboard() });
+    } catch (err) {
+      logger.error({ err }, 'Error processing successful payment');
+      if (isAppError(err)) {
+        if (err.code === 'SUBSCRIPTION_ERROR') {
+          await ctx.reply(Texts.ERROR_ALREADY_ACTIVE, { reply_markup: backToMainKeyboard() });
+          return;
+        }
+      }
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };
 }

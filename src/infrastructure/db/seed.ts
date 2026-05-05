@@ -18,7 +18,7 @@ async function seed(): Promise<void> {
         planRepo.create({
           name: 'Бесплатный',
           type: 'trial',
-          durationDays: 7,
+          durationDays: 14,
           deviceLimit: 2,
           priceStars: 0,
           priceRub: 0,

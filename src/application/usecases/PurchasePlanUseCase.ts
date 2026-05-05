@@ -45,9 +45,21 @@ export class PurchasePlanUseCase {
     if (plan.type === 'trial') throw new ValidationError('Use trial activation for trial plans');
 
     // Check for existing active subscription
+    let existingRemnawaveUserId: string | null = null;
     const existingSub = await this.subscriptionRepo.findActiveByUserId(userId);
     if (existingSub) {
-      throw new SubscriptionError('User already has active subscription');
+      // Если есть активная подписка - проверяем тип
+      const existingPlan = await this.planRepo.findById(existingSub.planId);
+      if (existingPlan && existingPlan.type === 'trial') {
+        // Если это бесплатный тариф - запоминаем remnawaveUserId для апгрейда
+        logger.info({ userId, existingSubId: existingSub.id }, 'Upgrading trial subscription to paid');
+        existingRemnawaveUserId = existingSub.remnawaveUserId;
+        // Деактивируем старую подписку в БД
+        await this.subscriptionRepo.update(existingSub.id, { status: 'expired' });
+      } else {
+        // Если это платный тариф - нельзя купить ещё один
+        throw new SubscriptionError('User already has active paid subscription');
+      }
     }
 
     // Determine amount based on provider
@@ -71,20 +83,35 @@ export class PurchasePlanUseCase {
       );
     }
 
-    // Create user in Remnawave with tag and squad
+    // Create or upgrade user in Remnawave
     const env = getEnv();
     const tag = plan.remnawaveTag ?? 'PAID';
     const activeInternalSquads = env.REMNAWAVE_DEFAULT_SQUAD ? [env.REMNAWAVE_DEFAULT_SQUAD] : [];
 
-    const remnawaveUserId = await this.remnawaveService.createUser(
-      user.telegramId,
-      user.username ?? `user_${user.telegramId}`,
-      tag,
-      activeInternalSquads,
-    );
+    let remnawaveUserId: string;
 
-    // Set device limit
-    await this.remnawaveService.updateDeviceLimit(remnawaveUserId, plan.deviceLimit);
+    if (existingRemnawaveUserId) {
+      // Апгрейд существующего пользователя
+      await this.remnawaveService.upgradeUser(existingRemnawaveUserId, {
+        tag,
+        deviceLimit: plan.deviceLimit,
+        trafficLimitBytes: 0, // Безлимит для платных
+        trafficLimitStrategy: 'NO_RESET',
+        expireAt: daysFromNow(plan.durationDays),
+      });
+      remnawaveUserId = existingRemnawaveUserId;
+    } else {
+      // Создаём нового пользователя
+      remnawaveUserId = await this.remnawaveService.createUser(
+        user.telegramId,
+        user.username ?? `user_${user.telegramId}`,
+        tag,
+        activeInternalSquads,
+      );
+
+      // Set device limit
+      await this.remnawaveService.updateDeviceLimit(remnawaveUserId, plan.deviceLimit);
+    }
 
     const startDate = new Date();
     const endDate = daysFromNow(plan.durationDays);

@@ -16,6 +16,7 @@ export interface PaymentResult {
   provider: PaymentProvider;
   status: PaymentStatus;
   url?: string;
+  externalId?: string;
 }
 
 export interface VpnCredentials {

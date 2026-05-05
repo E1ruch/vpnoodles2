@@ -20,6 +20,16 @@ export interface IRemnawaveService {
   updateDeviceLimit(remnawaveUserId: string, limit: number): Promise<void>;
   updateUserTag(remnawaveUserId: string, tag: string): Promise<void>;
   extendUser(remnawaveUserId: string, days: number): Promise<void>;
+  upgradeUser(
+    remnawaveUserId: string,
+    options: {
+      tag: string;
+      deviceLimit: number;
+      trafficLimitBytes: number;
+      trafficLimitStrategy: 'NO_RESET' | 'DAY' | 'MONTH';
+      expireAt: Date;
+    },
+  ): Promise<void>;
 }
 
 export interface IPaymentService {
