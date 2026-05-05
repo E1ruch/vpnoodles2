@@ -19,12 +19,12 @@ async function seed(): Promise<void> {
           name: 'Бесплатный',
           type: 'trial',
           durationDays: 7,
-          deviceLimit: 1,
+          deviceLimit: 2,
           priceStars: 0,
           priceRub: 0,
           isActive: true,
           sortOrder: 0,
-          description: '7 дней бесплатного VPN, 1 устройство',
+          description: '7 дней бесплатного VPN, 2 устройства',
         }),
       );
       logger.info('Trial plan seeded');
