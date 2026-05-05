@@ -9,6 +9,7 @@ import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { ValidationError, SubscriptionError } from '../../shared/errors/index.js';
 import { daysFromNow } from '../../shared/utils/index.js';
+import { getEnv } from '../../shared/config/env.js';
 import type { PaymentProvider } from '../../shared/types/index.js';
 
 export interface PurchaseResult {
@@ -70,10 +71,16 @@ export class PurchasePlanUseCase {
       );
     }
 
-    // Create user in Remnawave
+    // Create user in Remnawave with tag and squad
+    const env = getEnv();
+    const tag = plan.remnawaveTag ?? 'PAID';
+    const activeInternalSquads = env.REMNAWAVE_DEFAULT_SQUAD ? [env.REMNAWAVE_DEFAULT_SQUAD] : [];
+
     const remnawaveUserId = await this.remnawaveService.createUser(
       user.telegramId,
       user.username ?? `user_${user.telegramId}`,
+      tag,
+      activeInternalSquads,
     );
 
     // Set device limit

@@ -41,10 +41,15 @@ export class ActivateTrialUseCase {
       throw new ValidationError('Trial plan not found');
     }
 
-    // Create user in Remnawave
+    // Create user in Remnawave with tag and squad
+    const tag = trialPlan.remnawaveTag ?? 'TRIAL';
+    const activeInternalSquads = env.REMNAWAVE_DEFAULT_SQUAD ? [env.REMNAWAVE_DEFAULT_SQUAD] : [];
+
     const remnawaveUserId = await this.remnawaveService.createUser(
       user.telegramId,
       user.username ?? `user_${user.telegramId}`,
+      tag,
+      activeInternalSquads,
     );
 
     const startDate = new Date();

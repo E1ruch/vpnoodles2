@@ -32,6 +32,9 @@ export class Plan {
   @Column({ type: 'integer', default: 0 })
   sortOrder: number = 0;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  remnawaveTag: string | null = null;
+
   @Column({ type: 'text', nullable: true })
   description: string | null = null;
 

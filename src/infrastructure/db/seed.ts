@@ -24,6 +24,7 @@ async function seed(): Promise<void> {
           priceRub: 0,
           isActive: true,
           sortOrder: 0,
+          remnawaveTag: 'TRIAL',
           description: '7 дней бесплатного VPN, 2 устройства',
         }),
       );
@@ -39,6 +40,7 @@ async function seed(): Promise<void> {
         priceStars: 80,
         priceRub: 149,
         sortOrder: 1,
+        remnawaveTag: '1_MONTH',
         description: '30 дней, 3 устройства',
       },
       {
@@ -48,6 +50,7 @@ async function seed(): Promise<void> {
         priceStars: 225,
         priceRub: 399,
         sortOrder: 2,
+        remnawaveTag: '3_MONTHS',
         description: '90 дней, 5 устройств — выгода 16%',
       },
       {
@@ -57,6 +60,7 @@ async function seed(): Promise<void> {
         priceStars: 680,
         priceRub: 1199,
         sortOrder: 3,
+        remnawaveTag: '1_YEAR',
         description: '365 дней, 10 устройств — выгода 37%',
       },
     ];

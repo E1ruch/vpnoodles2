@@ -1,12 +1,18 @@
 import type { VpnCredentials, PaymentResult, PaymentProvider } from '../../shared/types/index.js';
 
 export interface IRemnawaveService {
-  createUser(telegramId: number, username: string): Promise<string>;
+  createUser(
+    telegramId: number,
+    username: string,
+    tag: string,
+    activeInternalSquads: string[],
+  ): Promise<string>;
   deleteUser(remnawaveUserId: string): Promise<void>;
   suspendUser(remnawaveUserId: string): Promise<void>;
   resumeUser(remnawaveUserId: string): Promise<void>;
   getSubscriptionUrl(remnawaveUserId: string): Promise<string>;
   updateDeviceLimit(remnawaveUserId: string, limit: number): Promise<void>;
+  updateUserTag(remnawaveUserId: string, tag: string): Promise<void>;
   extendUser(remnawaveUserId: string, days: number): Promise<void>;
 }
 

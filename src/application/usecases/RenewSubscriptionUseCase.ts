@@ -37,10 +37,13 @@ export class RenewSubscriptionUseCase {
       endDate: newEndDate,
     });
 
-    // Extend in Remnawave
+    // Extend in Remnawave and update tag
     if (subscription.remnawaveUserId) {
       await this.remnawaveService.resumeUser(subscription.remnawaveUserId);
       await this.remnawaveService.extendUser(subscription.remnawaveUserId, additionalDays);
+      // Update tag to match new plan (e.g., TRIAL -> 1_MONTH)
+      const newTag = plan.remnawaveTag ?? 'PAID';
+      await this.remnawaveService.updateUserTag(subscription.remnawaveUserId, newTag);
     }
 
     await this.auditLogRepo.create({

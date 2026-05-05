@@ -23,6 +23,7 @@ const envSchema = z.object({
   REMNAWAVE_API_URL: z.string().min(1),
   REMNAWAVE_API_KEY: z.string().min(1),
   REMNAWAVE_TIMEOUT_MS: z.coerce.number().default(10000),
+  REMNAWAVE_DEFAULT_SQUAD: z.string().default(''),
 
   // Payments
   YOOKASSA_SHOP_ID: z.string().optional(),
