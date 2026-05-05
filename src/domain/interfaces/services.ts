@@ -7,6 +7,11 @@ export interface IRemnawaveService {
     username: string,
     tag: string,
     activeInternalSquads: string[],
+    options?: {
+      trafficLimitBytes?: number;
+      trafficLimitStrategy?: 'NO_RESET' | 'DAY' | 'MONTH';
+      expireAt?: Date;
+    },
   ): Promise<string>;
   deleteUser(remnawaveUserId: string): Promise<void>;
   suspendUser(remnawaveUserId: string): Promise<void>;

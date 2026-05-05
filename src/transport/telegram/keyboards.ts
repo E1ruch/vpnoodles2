@@ -17,13 +17,10 @@ export function mainMenuKeyboard(): InlineKeyboardMarkup {
   };
 }
 
-export function planSelectionKeyboard(hasUsedTrial: boolean): InlineKeyboardMarkup {
+export function planSelectionKeyboard(): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
-  if (!hasUsedTrial) {
-    buttons.push([{ text: '🆓 Бесплатный тариф', callback_data: 'plan_trial' }]);
-  }
-
+  buttons.push([{ text: '🆓 Бесплатный тариф', callback_data: 'plan_trial' }]);
   buttons.push([{ text: '💎 Платные тарифы', callback_data: 'plan_paid' }]);
   buttons.push([{ text: '◀️ Назад', callback_data: 'back_main' }]);
 

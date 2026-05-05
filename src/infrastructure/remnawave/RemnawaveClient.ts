@@ -107,11 +107,16 @@ export class RemnawaveClient implements IRemnawaveService {
     username: string,
     tag: string,
     activeInternalSquads: string[],
+    options?: {
+      trafficLimitBytes?: number;
+      trafficLimitStrategy?: 'NO_RESET' | 'DAY' | 'MONTH';
+      expireAt?: Date;
+    },
   ): Promise<string> {
     const logger = getLogger();
     // PostgreSQL bigint может возвращать строку, поэтому принудительно конвертируем в число
     const numericTelegramId = Number(telegramId);
-    logger.info({ telegramId: numericTelegramId, username, tag, activeInternalSquads }, 'Creating Remnawave user');
+    logger.info({ telegramId: numericTelegramId, username, tag, activeInternalSquads, options }, 'Creating Remnawave user');
 
     return this.withRetry(async () => {
       // Сначала проверяем, существует ли уже пользователь с таким username
@@ -124,9 +129,9 @@ export class RemnawaveClient implements IRemnawaveService {
       const payload: RemnawaveCreateUserPayload = {
         username: `tg_${numericTelegramId}`,
         status: 'ACTIVE',
-        trafficLimitBytes: 0,
-        trafficLimitStrategy: 'NO_RESET',
-        expireAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        trafficLimitBytes: options?.trafficLimitBytes ?? 0,
+        trafficLimitStrategy: options?.trafficLimitStrategy ?? 'NO_RESET',
+        expireAt: options?.expireAt?.toISOString() ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         telegramId: numericTelegramId,
         hwidDeviceLimit: 1,
         description: `Telegram user: ${username || numericTelegramId}`,

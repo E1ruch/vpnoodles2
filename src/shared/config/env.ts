@@ -31,8 +31,10 @@ const envSchema = z.object({
   YOOKASSA_WEBHOOK_URL: z.string().optional(),
 
   // App
-  TRIAL_DURATION_DAYS: z.coerce.number().default(3),
-  TRIAL_DEVICE_LIMIT: z.coerce.number().default(1),
+  TRIAL_DURATION_DAYS: z.coerce.number().default(14),
+  TRIAL_DEVICE_LIMIT: z.coerce.number().default(2),
+  TRIAL_TRAFFIC_LIMIT_GB: z.coerce.number().default(2),
+  TRIAL_TRAFFIC_STRATEGY: z.enum(['NO_RESET', 'DAY', 'MONTH']).default('DAY'),
   SUPPORT_USERNAME: z.string().default('support'),
 });
 

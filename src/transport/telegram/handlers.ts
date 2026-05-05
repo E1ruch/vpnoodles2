@@ -84,7 +84,6 @@ export class BotHandlers {
       );
 
       const user = await this.userRepo.findById(userId);
-      const hasUsedTrial = user?.hasUsedTrial ?? false;
 
       const sub = await this.getSubscription.execute(userId);
 
@@ -95,7 +94,7 @@ export class BotHandlers {
         await ctx.reply(welcomeText, { reply_markup: mainMenuKeyboard() });
       } else {
         const welcomeText = Texts.WELCOME.replace('{firstName}', firstName);
-        await ctx.reply(welcomeText, { reply_markup: planSelectionKeyboard(hasUsedTrial) });
+        await ctx.reply(welcomeText, { reply_markup: planSelectionKeyboard() });
       }
     } catch (err) {
       logger.error({ err }, 'Error in /start handler');
@@ -135,7 +134,7 @@ export class BotHandlers {
       const sub = await this.getSubscription.execute(user.id);
       if (!sub) {
         await ctx.editMessageText(Texts.VPN_NOT_FOUND, {
-          reply_markup: planSelectionKeyboard(user.hasUsedTrial),
+          reply_markup: planSelectionKeyboard(),
         });
         return;
       }
@@ -166,7 +165,7 @@ export class BotHandlers {
       if (!user) return;
 
       await ctx.editMessageText(Texts.CHOOSE_PLAN, {
-        reply_markup: planSelectionKeyboard(user.hasUsedTrial),
+        reply_markup: planSelectionKeyboard(),
       });
     } catch {
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });

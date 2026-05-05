@@ -26,10 +26,8 @@ export class ActivateTrialUseCase {
       throw new ValidationError('User not found');
     }
 
-    if (user.hasUsedTrial) {
-      throw new SubscriptionError('Trial already used');
-    }
-
+    // Проверяем только наличие активной подписки, но не hasUsedTrial
+    // Бесплатный тариф можно активировать повторно после окончания
     const existingSub = await this.subscriptionRepo.findActiveByUserId(userId);
     if (existingSub) {
       throw new SubscriptionError('User already has active subscription');
@@ -45,15 +43,25 @@ export class ActivateTrialUseCase {
     const tag = trialPlan.remnawaveTag ?? 'TRIAL';
     const activeInternalSquads = env.REMNAWAVE_DEFAULT_SQUAD ? [env.REMNAWAVE_DEFAULT_SQUAD] : [];
 
+    // Конвертируем ГБ в байты (1 ГБ = 1024^3 байт)
+    const trafficLimitBytes = env.TRIAL_TRAFFIC_LIMIT_GB * 1024 * 1024 * 1024;
+    const trafficLimitStrategy = env.TRIAL_TRAFFIC_STRATEGY;
+    const expireAt = daysFromNow(env.TRIAL_DURATION_DAYS);
+
     const remnawaveUserId = await this.remnawaveService.createUser(
       user.telegramId,
       user.username ?? `user_${user.telegramId}`,
       tag,
       activeInternalSquads,
+      {
+        trafficLimitBytes,
+        trafficLimitStrategy,
+        expireAt,
+      },
     );
 
     const startDate = new Date();
-    const endDate = daysFromNow(env.TRIAL_DURATION_DAYS);
+    const endDate = expireAt;
 
     const subscription = await this.subscriptionRepo.create({
       userId,
@@ -71,8 +79,8 @@ export class ActivateTrialUseCase {
     // Update subscription with URL
     await this.subscriptionRepo.update(subscription.id, { subscriptionUrl });
 
-    // Mark trial as used
-    await this.userRepo.update(userId, { hasUsedTrial: true });
+    // НЕ отмечаем hasUsedTrial - бесплатный тариф можно продлевать
+    // await this.userRepo.update(userId, { hasUsedTrial: true });
 
     await this.auditLogRepo.create({
       userId,
