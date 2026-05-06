@@ -82,6 +82,7 @@ docker compose up -d
 # Применить миграции
 docker compose exec app npm run migrate
 docker compose exec app npm run seed
+
 ```
 
 ## 📋 Скрипты
