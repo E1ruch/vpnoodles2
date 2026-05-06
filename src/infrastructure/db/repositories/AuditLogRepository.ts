@@ -18,4 +18,15 @@ export class AuditLogRepository implements IAuditLogRepository {
     const repo = await this.getRepo();
     return repo.find({ where: { userId }, order: { createdAt: 'DESC' }, take: limit });
   }
+
+  async findAll(options?: { limit?: number; order?: { [key: string]: 'ASC' | 'DESC' } }): Promise<AuditLog[]> {
+    const repo = await this.getRepo();
+    const order = options?.order || { createdAt: 'DESC' };
+    return repo.find({ order, take: options?.limit });
+  }
+
+  async count(): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count();
+  }
 }

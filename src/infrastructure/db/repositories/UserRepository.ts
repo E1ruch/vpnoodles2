@@ -18,6 +18,16 @@ export class UserRepository implements IUserRepository {
     return repo.findOne({ where: { telegramId } });
   }
 
+  async findAll(): Promise<User[]> {
+    const repo = await this.getRepo();
+    return repo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async count(): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count();
+  }
+
   async create(data: Partial<User>): Promise<User> {
     const repo = await this.getRepo();
     const user = repo.create(data);

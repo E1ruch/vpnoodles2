@@ -107,6 +107,9 @@ export function createContainer(): AppContainer {
     purchasePlanUseCase,
     userRepo,
     planRepo,
+    subscriptionRepo,
+    paymentRepo,
+    auditLogRepo,
     qrCodeService,
   );
 

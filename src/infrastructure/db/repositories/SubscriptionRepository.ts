@@ -31,6 +31,16 @@ export class SubscriptionRepository implements ISubscriptionRepository {
     });
   }
 
+  async findAll(): Promise<Subscription[]> {
+    const repo = await this.getRepo();
+    return repo.find({ relations: ['plan', 'user'], order: { createdAt: 'DESC' } });
+  }
+
+  async count(): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count();
+  }
+
   async create(data: Partial<Subscription>): Promise<Subscription> {
     const repo = await this.getRepo();
     const sub = repo.create(data);

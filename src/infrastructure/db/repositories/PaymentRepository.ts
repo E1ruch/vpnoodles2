@@ -28,6 +28,16 @@ export class PaymentRepository implements IPaymentRepository {
     return repo.findOne({ where: { userId, status: 'pending' } });
   }
 
+  async findAll(): Promise<Payment[]> {
+    const repo = await this.getRepo();
+    return repo.find({ relations: ['user', 'plan'], order: { createdAt: 'DESC' } });
+  }
+
+  async count(): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count();
+  }
+
   async create(data: Partial<Payment>): Promise<Payment> {
     const repo = await this.getRepo();
     const payment = repo.create(data);

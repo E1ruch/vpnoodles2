@@ -13,6 +13,8 @@ import type {
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByTelegramId(telegramId: number): Promise<User | null>;
+  findAll(): Promise<User[]>;
+  count(): Promise<number>;
   create(user: Partial<User>): Promise<User>;
   update(id: string, data: Partial<User>): Promise<User>;
 }
@@ -28,6 +30,8 @@ export interface ISubscriptionRepository {
   findById(id: string): Promise<Subscription | null>;
   findActiveByUserId(userId: string): Promise<Subscription | null>;
   findByUserId(userId: string): Promise<Subscription[]>;
+  findAll(): Promise<Subscription[]>;
+  count(): Promise<number>;
   create(subscription: Partial<Subscription>): Promise<Subscription>;
   update(id: string, data: Partial<Subscription>): Promise<Subscription>;
   findExpiringSoon(hours: number): Promise<Subscription[]>;
@@ -38,6 +42,8 @@ export interface IPaymentRepository {
   findByExternalId(externalId: string): Promise<Payment | null>;
   findByUserId(userId: string): Promise<Payment[]>;
   findPendingByUserId(userId: string): Promise<Payment | null>;
+  findAll(): Promise<Payment[]>;
+  count(): Promise<number>;
   create(payment: Partial<Payment>): Promise<Payment>;
   update(id: string, data: Partial<Payment>): Promise<Payment>;
   findCompletedByUserIdAndPlanId(userId: string, planId: string): Promise<Payment | null>;
@@ -46,6 +52,8 @@ export interface IPaymentRepository {
 export interface IAuditLogRepository {
   create(log: Partial<AuditLog>): Promise<AuditLog>;
   findByUserId(userId: string, limit: number): Promise<AuditLog[]>;
+  findAll(options?: { limit?: number; order?: { [key: string]: 'ASC' | 'DESC' } }): Promise<AuditLog[]>;
+  count(): Promise<number>;
 }
 
 export type SubscriptionStatusFilter = SubscriptionStatus;

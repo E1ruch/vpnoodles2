@@ -40,14 +40,35 @@ export function paidPlansKeyboard(plans: Plan[]): InlineKeyboardMarkup {
   return { inline_keyboard: buttons };
 }
 
-export function vpnActionsKeyboard(
-  subscriptionId: string,
-  isExpired: boolean,
-): InlineKeyboardMarkup {
+export function adminKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: '👥 Пользователи', callback_data: 'admin_users' },
+        { text: '📊 Статистика', callback_data: 'admin_stats' },
+      ],
+      [
+        { text: '📋 Логи', callback_data: 'admin_logs' },
+        { text: '💳 Подписки', callback_data: 'admin_subscriptions' },
+      ],
+      [{ text: 'Назад', callback_data: 'back_main' }],
+    ],
+  };
+}
+
+export function adminBackKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }]],
+  };
+}
+
+export function vpnActionsKeyboard(subscriptionId: string, isExpired: boolean): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
   if (isExpired) {
     buttons.push([{ text: '🔄 Продлить', callback_data: `renew_${subscriptionId}` }]);
+  } else {
+    buttons.push([{ text: '🔗 Получить ссылку', callback_data: `get_link_${subscriptionId}` }]);
   }
 
   buttons.push([{ text: '📖 Инструкция', callback_data: 'instructions' }]);
