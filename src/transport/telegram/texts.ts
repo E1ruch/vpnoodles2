@@ -66,7 +66,7 @@ export const Texts = {
 ⏳ Осталось: {daysLeft} дн.
 
 🔗 Подключайтесь по ссылке ниже:
-
+\{url}\
 
 Нажмите на кнопку «Инструкция», если нужна помощь с подключением.`,
 
@@ -122,14 +122,7 @@ export const Texts = {
 🤝 Мы ценим каждого пользователя!`,
 
   // Profile
-  PROFILE: `👤 Ваш профиль
-
-🆔 Telegram ID: {telegramId}
-👤 Имя: {firstName}
-📊 Статус: {status}
-📅 С нами с: {regDate}
-
-💡 Нужна помощь? Напишите в поддержку!`,
+  PROFILE: "👤 **Ваш профиль**\n\n🆔 Telegram ID: `" + "{telegramId}" + "`\n👤 Имя: {firstName}\n📊 Статус: {status}\n📅 С нами с: {regDate}\n\n💡 Нужна помощь? Напишите в поддержку!",
 
   // Errors
   ERROR_GENERIC: `❌ Упс! Что-то пошло не так

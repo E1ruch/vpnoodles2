@@ -152,7 +152,8 @@ export class BotHandlers {
             .replace('{endDate}', formatDate(sub.endDate))
             .replace('{usedDevices}', String(sub.usedDevices))
             .replace('{deviceLimit}', String(sub.deviceLimit))
-            .replace('{daysLeft}', String(sub.daysLeft));
+            .replace('{daysLeft}', String(sub.daysLeft))
+            .replace('{url}', sub.subscriptionUrl || 'Ссылка недоступна');
 
       await ctx.editMessageText(text, {
         reply_markup: vpnActionsKeyboard(sub.id, sub.isExpired),
@@ -387,7 +388,7 @@ export class BotHandlers {
         .replace('{status}', status)
         .replace('{regDate}', formatDate(user.createdAt));
 
-      await ctx.editMessageText(text, { reply_markup: backToMainKeyboard() });
+      await ctx.editMessageText(text, { reply_markup: backToMainKeyboard(), parse_mode: 'Markdown' });
     } catch {
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
