@@ -111,6 +111,7 @@ export function createContainer(): AppContainer {
     paymentRepo,
     auditLogRepo,
     qrCodeService,
+    paymentService,
   );
 
   logger.info('Container initialized');

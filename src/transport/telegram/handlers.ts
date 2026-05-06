@@ -9,6 +9,7 @@ import type { ISubscriptionRepository } from '../../domain/interfaces/repositori
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
+import type { IPaymentService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { isAppError } from '../../shared/errors/index.js';
 import { formatDate, formatCurrency } from '../../shared/utils/index.js';
@@ -38,6 +39,7 @@ export class BotHandlers {
   private paymentRepo: IPaymentRepository;
   private auditLogRepo: IAuditLogRepository;
   private qrCodeService: IQRCodeService;
+  private paymentService: IPaymentService;
   private yooKassaService: YooKassaService;
 
   constructor(
@@ -52,6 +54,7 @@ export class BotHandlers {
     paymentRepo: IPaymentRepository,
     auditLogRepo: IAuditLogRepository,
     qrCodeService: IQRCodeService,
+    paymentService: IPaymentService,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -64,6 +67,7 @@ export class BotHandlers {
     this.paymentRepo = paymentRepo;
     this.auditLogRepo = auditLogRepo;
     this.qrCodeService = qrCodeService;
+    this.paymentService = paymentService;
     this.yooKassaService = new YooKassaService();
   }
 
@@ -89,6 +93,7 @@ export class BotHandlers {
     this.bot.action('admin_subscriptions', this.handleAdminSubscriptions);
 
     // Telegram Stars payment handlers
+    this.bot.on('shipping_query', this.handleShippingQuery);
     this.bot.on('pre_checkout_query', this.handlePreCheckout);
     this.bot.on('successful_payment', this.handleSuccessfulPayment);
 
@@ -286,8 +291,8 @@ export class BotHandlers {
         buttons.push([{ text: `⭐ Telegram Stars (${plan.priceStars})`, callback_data: `pay_stars_${planId}` }]);
       }
 
-      // YooKassa (если настроена)
-      if (this.yooKassaService.isConfigured()) {
+      // YooKassa (Telegram invoice или fallback на внешнюю ссылку)
+      if (getEnv().TELEGRAM_PROVIDER_TOKEN || this.yooKassaService.isConfigured()) {
         buttons.push([{ text: `💳 Картой (${formatCurrency(plan.priceRub)})`, callback_data: `pay_yookassa_${planId}` }]);
       }
 
@@ -334,36 +339,98 @@ export class BotHandlers {
 
       if (provider === 'stars') {
         // Telegram Stars инвойс
+        const payment = await this.paymentService.createPayment(
+          user.id,
+          planId,
+          'stars',
+          plan.priceStars,
+          'XTR',
+        );
+
         await ctx.replyWithInvoice({
           title: plan.name,
           description: `Подписка на ${plan.durationDays} дней. До ${plan.deviceLimit} устройств.`,
-          payload: `plan_${planId}`,
+          payload: `plan:stars:${planId}:${payment.paymentId}`,
           currency: 'XTR',
           prices: [{ label: plan.name, amount: plan.priceStars }],
           provider_token: '',
+          start_parameter: `vpn_stars_${planId}`,
         });
       } else if (provider === 'yookassa') {
-        // YooKassa платёж
-        const result = await this.yooKassaService.createPayment({
-          userId: user.id,
-          planId: planId,
-          planName: plan.name,
-          amount: plan.priceRub,
-          currency: 'RUB',
-          description: `VPN ${plan.name} - ${plan.durationDays} дней`,
-        });
-
-        if (result.url) {
-          await ctx.reply(
-            `💳 Для оплаты перейдите по ссылке:\n\n${result.url}\n\n` +
-            `После оплаты подписка активируется автоматически.`,
-            { reply_markup: backToMainKeyboard() }
+        const env = getEnv();
+        if (env.TELEGRAM_PROVIDER_TOKEN) {
+          const amountInKopecks = plan.priceRub * 100;
+          const payment = await this.paymentService.createPayment(
+            user.id,
+            planId,
+            'yookassa',
+            plan.priceRub,
+            'RUB',
           );
+
+          await ctx.replyWithInvoice({
+            title: plan.name,
+            description: `Подписка на ${plan.durationDays} дней. До ${plan.deviceLimit} устройств.`,
+            payload: `plan:yookassa:${planId}:${payment.paymentId}`,
+            provider_token: env.TELEGRAM_PROVIDER_TOKEN,
+            currency: 'RUB',
+            prices: [{ label: 'К оплате', amount: amountInKopecks }],
+            start_parameter: `vpn_yookassa_${planId}`,
+          });
+        } else {
+          const result = await this.yooKassaService.createPayment({
+            userId: user.id,
+            planId,
+            planName: plan.name,
+            amount: plan.priceRub,
+            currency: 'RUB',
+            description: `VPN ${plan.name} - ${plan.durationDays} дней`,
+          });
+
+          if (result.url) {
+            await ctx.reply(
+              `💳 Telegram-платежи временно недоступны, используем резервный способ.\n\n` +
+                `Оплатите по ссылке:\n${result.url}\n\n` +
+                `После оплаты подписка активируется автоматически.`,
+              { reply_markup: backToMainKeyboard() },
+            );
+          } else {
+            await ctx.reply('Не удалось получить ссылку на оплату.', {
+              reply_markup: backToMainKeyboard(),
+            });
+          }
         }
       }
     } catch (err) {
       logger.error({ err }, 'Error processing payment method');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleShippingQuery = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const query = ctx.update && 'shipping_query' in ctx.update ? ctx.update.shipping_query : null;
+      if (!query) return;
+
+      await ctx.telegram.answerShippingQuery(
+        query.id,
+        true,
+        [
+          {
+            id: 'digital_delivery',
+            title: 'Цифровая доставка',
+            prices: [{ label: 'Доставка', amount: 0 }],
+          },
+        ],
+        undefined,
+      );
+    } catch (err) {
+      logger.error({ err }, 'Error in shipping_query');
+      const query = ctx.update && 'shipping_query' in ctx.update ? ctx.update.shipping_query : null;
+      if (query) {
+        await ctx.telegram.answerShippingQuery(query.id, false, undefined, 'Не удалось рассчитать доставку');
+      }
     }
   };
 
@@ -452,6 +519,11 @@ export class BotHandlers {
   private handlePreCheckout = async (ctx: Context): Promise<void> => {
     const logger = getLogger();
     try {
+      const query = ctx.update && 'pre_checkout_query' in ctx.update ? ctx.update.pre_checkout_query : null;
+      if (query && !query.invoice_payload.startsWith('plan:')) {
+        await ctx.answerPreCheckoutQuery(false, 'Некорректный payload оплаты');
+        return;
+      }
       await ctx.answerPreCheckoutQuery(true);
     } catch (err) {
       logger.error({ err }, 'Error in pre_checkout');
@@ -468,13 +540,29 @@ export class BotHandlers {
       const payment = ctx.message;
       if (!payment || !('successful_payment' in payment)) return;
 
-      const payload = payment.successful_payment.invoice_payload;
-      const planId = payload.replace('plan_', '');
+      const successfulPayment = payment.successful_payment;
+      const payload = successfulPayment.invoice_payload;
+      const payloadParts = payload.split(':');
+      if (payloadParts.length !== 4 || payloadParts[0] !== 'plan') {
+        await ctx.reply('Ошибка: некорректные данные оплаты.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
+      const provider = payloadParts[1];
+      const planId = payloadParts[2];
+      const paymentId = payloadParts[3];
+      if (!planId || !paymentId || (provider !== 'stars' && provider !== 'yookassa')) {
+        await ctx.reply('Ошибка: неизвестный провайдер оплаты.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
 
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user) return;
 
-      const result = await this.purchasePlan.execute(user.id, planId, 'stars');
+      const result = await this.purchasePlan.execute(user.id, planId, provider);
+      await this.paymentService.markAsCompleted(
+        paymentId,
+        successfulPayment.provider_payment_charge_id,
+      );
 
       await ctx.reply(Texts.PAYMENT_SUCCESS);
 
@@ -485,6 +573,21 @@ export class BotHandlers {
         { caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl) },
       );
       await ctx.reply(Texts.INSTRUCTIONS, { reply_markup: backToMainKeyboard() });
+
+      await this.auditLogRepo.create({
+        userId: user.id,
+        action: 'telegram_payment_successful',
+        entityType: 'payment',
+        entityId: paymentId,
+        metadata: {
+          provider,
+          planId,
+          telegramChargeId: successfulPayment.telegram_payment_charge_id,
+          providerPaymentChargeId: successfulPayment.provider_payment_charge_id,
+          totalAmount: successfulPayment.total_amount,
+          currency: successfulPayment.currency,
+        },
+      });
     } catch (err) {
       logger.error({ err }, 'Error processing successful payment');
       if (isAppError(err)) {
