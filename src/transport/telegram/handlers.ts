@@ -520,10 +520,43 @@ export class BotHandlers {
     const logger = getLogger();
     try {
       const query = ctx.update && 'pre_checkout_query' in ctx.update ? ctx.update.pre_checkout_query : null;
-      if (query && !query.invoice_payload.startsWith('plan:')) {
-        await ctx.answerPreCheckoutQuery(false, 'Некорректный payload оплаты');
+      if (!query) return;
+
+      const payloadParts = query.invoice_payload.split(':');
+      if (payloadParts.length !== 4 || payloadParts[0] !== 'plan') {
+        await ctx.answerPreCheckoutQuery(false, 'Некорректный payload оплаты.');
         return;
       }
+
+      const provider = payloadParts[1];
+      const planId = payloadParts[2];
+      const paymentId = payloadParts[3];
+      if (!planId || !paymentId || (provider !== 'stars' && provider !== 'yookassa')) {
+        await ctx.answerPreCheckoutQuery(false, 'Некорректные данные оплаты.');
+        return;
+      }
+
+      const [plan, payment, user] = await Promise.all([
+        this.planRepo.findById(planId),
+        this.paymentRepo.findById(paymentId),
+        this.userRepo.findByTelegramId(query.from.id),
+      ]);
+
+      if (!plan || !payment || !user) {
+        await ctx.answerPreCheckoutQuery(false, 'Платеж не найден или недоступен.');
+        return;
+      }
+
+      if (
+        payment.userId !== user.id ||
+        payment.planId !== plan.id ||
+        payment.provider !== provider ||
+        payment.status !== 'pending'
+      ) {
+        await ctx.answerPreCheckoutQuery(false, 'Платеж не прошел валидацию.');
+        return;
+      }
+
       await ctx.answerPreCheckoutQuery(true);
     } catch (err) {
       logger.error({ err }, 'Error in pre_checkout');
