@@ -31,6 +31,7 @@ const envSchema = z.object({
   YOOKASSA_SECRET_KEY: z.string().optional(),
   YOOKASSA_WEBHOOK_URL: z.string().optional(),
   TELEGRAM_PROVIDER_TOKEN: z.string().optional(),
+  PAYMENT_PENDING_TTL_MINUTES: z.coerce.number().default(10),
 
   // App
   TRIAL_DURATION_DAYS: z.coerce.number().default(14),

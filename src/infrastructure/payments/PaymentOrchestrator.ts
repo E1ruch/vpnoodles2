@@ -1,6 +1,7 @@
 import { getLogger } from '../../shared/logger/index.js';
 import { PaymentError } from '../../shared/errors/index.js';
 import { generateId } from '../../shared/utils/index.js';
+import { getEnv } from '../../shared/config/env.js';
 import type { IPaymentService } from '../../domain/interfaces/services.js';
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { PaymentResult, PaymentProvider, PaymentStatus } from '../../shared/types/index.js';
@@ -26,17 +27,32 @@ export class PaymentOrchestrator implements IPaymentService {
     currency: string,
   ): Promise<PaymentResult> {
     const logger = getLogger();
+    const env = getEnv();
+    const ttlMinutes = env.PAYMENT_PENDING_TTL_MINUTES;
 
     // Idempotency: check for existing pending payment
     const existingPayment = await this.paymentRepo.findPendingByUserId(userId);
     if (existingPayment) {
-      logger.info({ userId, paymentId: existingPayment.id }, 'Existing pending payment found');
-      return {
-        paymentId: existingPayment.id,
-        provider: existingPayment.provider,
-        status: existingPayment.status,
-        url: existingPayment.externalPaymentId ?? undefined,
-      };
+      const createdAtMs = existingPayment.createdAt.getTime();
+      const expiresAtMs = createdAtMs + ttlMinutes * 60 * 1000;
+      const isExpired = Date.now() > expiresAtMs;
+
+      if (isExpired) {
+        await this.paymentRepo.update(existingPayment.id, { status: 'failed' });
+      } else if (existingPayment.planId === planId && existingPayment.provider === provider) {
+        logger.info(
+          { userId, paymentId: existingPayment.id, provider, planId },
+          'Reusing active pending payment',
+        );
+        return {
+          paymentId: existingPayment.id,
+          provider: existingPayment.provider,
+          status: existingPayment.status,
+          url: existingPayment.externalPaymentId ?? undefined,
+        };
+      } else {
+        throw new PaymentError('У вас уже есть активный платеж. Завершите его или подождите 10 минут.');
+      }
     }
 
     // Distributed lock to prevent double activation

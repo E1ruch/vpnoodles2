@@ -388,19 +388,36 @@ export class BotHandlers {
             start_parameter: `vpn_yookassa_${planId}`,
           });
         } else {
-          const result = await this.yooKassaService.createPayment({
-            userId: user.id,
+          const payment = await this.paymentService.createPayment(
+            user.id,
             planId,
-            planName: plan.name,
-            amount: plan.priceRub,
-            currency: 'RUB',
-            description: `VPN ${plan.name} - ${plan.durationDays} дней`,
-          });
+            'yookassa',
+            plan.priceRub,
+            'RUB',
+          );
 
-          if (result.url) {
+          let paymentUrl = payment.url;
+          if (!paymentUrl) {
+            const result = await this.yooKassaService.createPayment({
+              userId: user.id,
+              planId,
+              planName: plan.name,
+              amount: plan.priceRub,
+              currency: 'RUB',
+              description: `VPN ${plan.name} - ${plan.durationDays} дней`,
+              internalPaymentId: payment.paymentId,
+            });
+
+            paymentUrl = result.url;
+            if (paymentUrl) {
+              await this.paymentRepo.update(payment.paymentId, { externalPaymentId: paymentUrl });
+            }
+          }
+
+          if (paymentUrl) {
             await ctx.reply(
               `💳 Telegram-платежи временно недоступны, используем резервный способ.\n\n` +
-                `Оплатите по ссылке:\n${result.url}\n\n` +
+                `Оплатите по ссылке:\n${paymentUrl}\n\n` +
                 `После оплаты подписка активируется автоматически.`,
               { reply_markup: backToMainKeyboard() },
             );

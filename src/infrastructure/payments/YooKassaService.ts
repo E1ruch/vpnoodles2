@@ -25,6 +25,7 @@ interface CreatePaymentOptions {
   amount: number;
   currency: string;
   description: string;
+  internalPaymentId?: string;
 }
 
 export class YooKassaService {
@@ -51,6 +52,7 @@ export class YooKassaService {
     }
 
     const idempotenceKey = generateId();
+    const internalPaymentId = options.internalPaymentId ?? idempotenceKey;
 
     try {
       const response = await fetch('https://api.yookassa.ru/v3/payments', {
@@ -75,7 +77,7 @@ export class YooKassaService {
           metadata: {
             userId: options.userId,
             planId: options.planId,
-            internalPaymentId: idempotenceKey,
+            internalPaymentId,
           },
         }),
       });
@@ -90,7 +92,7 @@ export class YooKassaService {
       logger.info({ paymentId: payment.id, status: payment.status }, 'YooKassa payment created');
 
       return {
-        paymentId: idempotenceKey,
+        paymentId: internalPaymentId,
         provider: 'yookassa' as PaymentProvider,
         status: 'pending',
         url: payment.confirmation?.confirmation_url,
