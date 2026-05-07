@@ -62,10 +62,14 @@ export function adminBackKeyboard(): InlineKeyboardMarkup {
   };
 }
 
-export function vpnActionsKeyboard(subscriptionId: string, isExpired: boolean): InlineKeyboardMarkup {
+export function vpnActionsKeyboard(
+  subscriptionId: string,
+  isExpired: boolean,
+  showRenewButton: boolean = false,
+): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
-  if (isExpired) {
+  if (isExpired || showRenewButton) {
     buttons.push([{ text: '🔄 Продлить', callback_data: `renew_${subscriptionId}` }]);
   } else {
     buttons.push([{ text: '🔗 Получить ссылку', callback_data: `get_link_${subscriptionId}` }]);

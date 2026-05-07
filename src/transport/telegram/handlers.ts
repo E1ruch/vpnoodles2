@@ -3,6 +3,7 @@ import type { RegisterUserUseCase } from '../../application/usecases/RegisterUse
 import type { ActivateTrialUseCase } from '../../application/usecases/ActivateTrialUseCase.js';
 import type { GetSubscriptionUseCase } from '../../application/usecases/GetSubscriptionUseCase.js';
 import type { PurchasePlanUseCase } from '../../application/usecases/PurchasePlanUseCase.js';
+import type { RenewSubscriptionUseCase } from '../../application/usecases/RenewSubscriptionUseCase.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
@@ -33,6 +34,7 @@ export class BotHandlers {
   private activateTrial: ActivateTrialUseCase;
   private getSubscription: GetSubscriptionUseCase;
   private purchasePlan: PurchasePlanUseCase;
+  private renewSubscription: RenewSubscriptionUseCase;
   private userRepo: IUserRepository;
   private planRepo: IPlanRepository;
   private subscriptionRepo: ISubscriptionRepository;
@@ -48,6 +50,7 @@ export class BotHandlers {
     activateTrial: ActivateTrialUseCase,
     getSubscription: GetSubscriptionUseCase,
     purchasePlan: PurchasePlanUseCase,
+    renewSubscription: RenewSubscriptionUseCase,
     userRepo: IUserRepository,
     planRepo: IPlanRepository,
     subscriptionRepo: ISubscriptionRepository,
@@ -61,6 +64,7 @@ export class BotHandlers {
     this.activateTrial = activateTrial;
     this.getSubscription = getSubscription;
     this.purchasePlan = purchasePlan;
+    this.renewSubscription = renewSubscription;
     this.userRepo = userRepo;
     this.planRepo = planRepo;
     this.subscriptionRepo = subscriptionRepo;
@@ -180,8 +184,10 @@ export class BotHandlers {
             .replace('{daysLeft}', String(sub.daysLeft))
             .replace('{url}', sub.subscriptionUrl || 'Ссылка недоступна');
 
+      const showRenewButton = sub.planType === 'trial' && sub.daysLeft <= 3;
+
       await ctx.editMessageText(text, {
-        reply_markup: vpnActionsKeyboard(sub.id, sub.isExpired),
+        reply_markup: vpnActionsKeyboard(sub.id, sub.isExpired, showRenewButton),
       });
     } catch (err) {
       logger.error({ err }, 'Error in my_vpn handler');
@@ -257,6 +263,10 @@ export class BotHandlers {
       logger.error({ err }, 'Error activating trial');
       if (isAppError(err)) {
         if (err.code === 'SUBSCRIPTION_ERROR') {
+          if (err.message.includes('Use renew')) {
+            await ctx.reply(Texts.ERROR_TRIAL_EXISTS, { reply_markup: backToMainKeyboard() });
+            return;
+          }
           await ctx.reply(Texts.ERROR_ALREADY_ACTIVE, { reply_markup: backToMainKeyboard() });
           return;
         }
@@ -504,7 +514,30 @@ export class BotHandlers {
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user) return;
 
-      // Show plans for renewal
+      const subscriptionId = cbData.data.replace('renew_', '');
+      const subscription = await this.subscriptionRepo.findById(subscriptionId);
+      if (!subscription || subscription.userId !== user.id) {
+        await ctx.reply('Подписка не найдена.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      const plan = await this.planRepo.findById(subscription.planId);
+      if (!plan) {
+        await ctx.reply('Тариф подписки не найден.', { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      if (plan.type === 'trial') {
+        const env = getEnv();
+        const result = await this.renewSubscription.execute(subscription.id, env.TRIAL_DURATION_DAYS);
+        await ctx.editMessageText(
+          `✅ Бесплатная подписка продлена до ${formatDate(result.endDate)}.`,
+          { reply_markup: backToMainKeyboard() },
+        );
+        return;
+      }
+
+      // Платные подписки продлеваются через оплату
       const plans = await this.planRepo.findByType('paid');
       await ctx.editMessageText(Texts.RENEW_CHOOSE_PLAN, {
         reply_markup: paidPlansKeyboard(plans),

@@ -26,17 +26,24 @@ export class ActivateTrialUseCase {
       throw new ValidationError('User not found');
     }
 
-    // Проверяем только наличие активной подписки, но не hasUsedTrial
-    // Бесплатный тариф можно активировать повторно после окончания
-    const existingSub = await this.subscriptionRepo.findActiveByUserId(userId);
-    if (existingSub) {
-      throw new SubscriptionError('User already has active subscription');
-    }
-
     const trialPlans = await this.planRepo.findByType('trial');
     const trialPlan = trialPlans[0];
     if (!trialPlan) {
       throw new ValidationError('Trial plan not found');
+    }
+
+    // Не даем создавать дубликат trial-подписки:
+    // если trial уже существует (даже истекший), пользователь должен использовать продление.
+    const userSubscriptions = await this.subscriptionRepo.findByUserId(userId);
+    const existingTrial = userSubscriptions.find((sub) => sub.planId === trialPlan.id);
+    if (existingTrial) {
+      throw new SubscriptionError('Trial subscription already exists. Use renew');
+    }
+
+    // Проверяем наличие активной подписки
+    const existingSub = await this.subscriptionRepo.findActiveByUserId(userId);
+    if (existingSub) {
+      throw new SubscriptionError('User already has active subscription');
     }
 
     // Create user in Remnawave with tag and squad
