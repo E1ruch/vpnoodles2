@@ -3,6 +3,7 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
+import type { Payment } from '../../domain/entities/Payment.js';
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { IPaymentService } from '../../domain/interfaces/services.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
@@ -34,6 +35,7 @@ export class PurchasePlanUseCase {
     userId: string,
     planId: string,
     provider: PaymentProvider,
+    options?: { existingPaymentId?: string; externalChargeId?: string },
   ): Promise<PurchaseResult> {
     const logger = getLogger();
 
@@ -69,17 +71,43 @@ export class PurchasePlanUseCase {
     const amount = provider === 'stars' ? plan.priceStars : plan.priceRub;
     const currency = provider === 'stars' ? 'XTR' : 'RUB';
 
-    // Create payment
-    const paymentResult = await this.paymentService.createPayment(
-      userId,
-      planId,
-      provider,
-      amount,
-      currency,
-    );
+    let fulfillmentPaymentId: string | undefined = options?.existingPaymentId;
+    let existingPaymentRecord: Payment | null = null;
 
-    // Mark payment as completed (for Stars, it's instant)
-    if (provider === 'stars') {
+    if (fulfillmentPaymentId) {
+      existingPaymentRecord = await this.paymentRepo.findById(fulfillmentPaymentId);
+      if (!existingPaymentRecord) {
+        throw new ValidationError('Payment not found');
+      }
+      if (
+        existingPaymentRecord.userId !== userId ||
+        existingPaymentRecord.planId !== planId ||
+        existingPaymentRecord.provider !== provider
+      ) {
+        throw new ValidationError('Payment does not match purchase');
+      }
+      if (existingPaymentRecord.status === 'completed') {
+        logger.info({ paymentId: fulfillmentPaymentId }, 'Payment already fulfilled');
+        return await this.buildPurchaseResultFromActiveSubscription(userId, planId);
+      }
+    }
+
+    let paymentResult: { paymentId: string };
+
+    if (fulfillmentPaymentId && existingPaymentRecord) {
+      paymentResult = { paymentId: fulfillmentPaymentId };
+    } else {
+      paymentResult = await this.paymentService.createPayment(
+        userId,
+        planId,
+        provider,
+        amount,
+        currency,
+      );
+    }
+
+    // Mark payment as completed (for Stars only when checkout создал новый платёж здесь)
+    if (provider === 'stars' && !fulfillmentPaymentId) {
       await this.paymentService.markAsCompleted(
         paymentResult.paymentId,
         `stars_${paymentResult.paymentId}`,
@@ -144,7 +172,31 @@ export class PurchasePlanUseCase {
       metadata: { planId, provider, amount, paymentId: paymentResult.paymentId },
     });
 
+    if (fulfillmentPaymentId && existingPaymentRecord) {
+      const externalId =
+        options?.externalChargeId ??
+        existingPaymentRecord.externalPaymentId ??
+        `${provider}_${paymentResult.paymentId}`;
+      await this.paymentService.markAsCompleted(fulfillmentPaymentId, externalId);
+    }
+
     logger.info({ userId, subscriptionId: subscription.id, planId }, 'Plan purchased');
     return { subscriptionId: subscription.id, subscriptionUrl, qrCodeBase64 };
+  }
+
+  private async buildPurchaseResultFromActiveSubscription(
+    userId: string,
+    planId: string,
+  ): Promise<PurchaseResult> {
+    const sub = await this.subscriptionRepo.findActiveByUserId(userId);
+    if (!sub || sub.planId !== planId || !sub.subscriptionUrl) {
+      throw new ValidationError('Active subscription not found');
+    }
+    const qrCodeBase64 = await this.qrCodeService.generateBase64(sub.subscriptionUrl);
+    return {
+      subscriptionId: sub.id,
+      subscriptionUrl: sub.subscriptionUrl,
+      qrCodeBase64,
+    };
   }
 }

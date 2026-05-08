@@ -44,6 +44,35 @@ export class YooKassaService {
     return !!(this.shopId && this.secretKey);
   }
 
+  async fetchPayment(yooKassaPaymentId: string): Promise<YooKassaPayment> {
+    const logger = getLogger();
+
+    if (!this.isConfigured()) {
+      throw new PaymentError('YooKassa is not configured');
+    }
+
+    const response = await fetch(`https://api.yookassa.ru/v3/payments/${yooKassaPaymentId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${Buffer.from(`${this.shopId}:${this.secretKey}`).toString('base64')}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error({ status: response.status, error: errorText }, 'YooKassa GET payment error');
+      throw new PaymentError(`YooKassa API error: ${response.status}`);
+    }
+
+    return (await response.json()) as YooKassaPayment;
+  }
+
+  async getConfirmationUrl(yooKassaPaymentId: string): Promise<string | undefined> {
+    const payment = await this.fetchPayment(yooKassaPaymentId);
+    return payment.confirmation?.confirmation_url;
+  }
+
   async createPayment(options: CreatePaymentOptions): Promise<PaymentResult> {
     const logger = getLogger();
 

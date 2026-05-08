@@ -42,6 +42,7 @@ export interface IPaymentRepository {
   findByExternalId(externalId: string): Promise<Payment | null>;
   findByUserId(userId: string): Promise<Payment[]>;
   findPendingByUserId(userId: string): Promise<Payment | null>;
+  findPendingByProvider(provider: PaymentProvider): Promise<Payment[]>;
   findAll(): Promise<Payment[]>;
   count(): Promise<number>;
   create(payment: Partial<Payment>): Promise<Payment>;

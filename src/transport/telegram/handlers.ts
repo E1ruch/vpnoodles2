@@ -399,7 +399,11 @@ export class BotHandlers {
           );
 
           let paymentUrl = payment.url;
-          if (!paymentUrl) {
+          if (paymentUrl && !paymentUrl.startsWith('http')) {
+            paymentUrl =
+              (await this.yooKassaService.getConfirmationUrl(paymentUrl)) ?? paymentUrl;
+          }
+          if (!paymentUrl || !paymentUrl.startsWith('http')) {
             const result = await this.yooKassaService.createPayment({
               userId: user.id,
               planId,
@@ -411,8 +415,10 @@ export class BotHandlers {
             });
 
             paymentUrl = result.url;
-            if (paymentUrl) {
-              await this.paymentRepo.update(payment.paymentId, { externalPaymentId: paymentUrl });
+            if (result.externalId) {
+              await this.paymentRepo.update(payment.paymentId, {
+                externalPaymentId: result.externalId,
+              });
             }
           }
 
@@ -420,7 +426,7 @@ export class BotHandlers {
             await ctx.reply(
               `💳 Telegram-платежи временно недоступны, используем резервный способ.\n\n` +
                 `Оплатите по ссылке:\n${paymentUrl}\n\n` +
-                `После оплаты подписка активируется автоматически.`,
+                `После оплаты доступ активируется в течение минуты (проверка статуса в ЮKassa). Также можно нажать /start.`,
               { reply_markup: backToMainKeyboard() },
             );
           } else {
@@ -643,11 +649,13 @@ export class BotHandlers {
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user) return;
 
-      const result = await this.purchasePlan.execute(user.id, planId, provider);
-      await this.paymentService.markAsCompleted(
-        paymentId,
-        successfulPayment.provider_payment_charge_id,
-      );
+      const result = await this.purchasePlan.execute(user.id, planId, provider, {
+        existingPaymentId: paymentId,
+        externalChargeId:
+          successfulPayment.provider_payment_charge_id ??
+          successfulPayment.telegram_payment_charge_id ??
+          `${provider}_${paymentId}`,
+      });
 
       await ctx.reply(Texts.PAYMENT_SUCCESS);
 

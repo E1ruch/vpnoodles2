@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import { getDataSource } from '../connection.js';
 import { Payment } from '../../../domain/entities/Payment.js';
 import type { IPaymentRepository } from '../../../domain/interfaces/repositories.js';
+import type { PaymentProvider } from '../../../shared/types/index.js';
 
 export class PaymentRepository implements IPaymentRepository {
   private getRepo(): Promise<Repository<Payment>> {
@@ -26,6 +27,14 @@ export class PaymentRepository implements IPaymentRepository {
   async findPendingByUserId(userId: string): Promise<Payment | null> {
     const repo = await this.getRepo();
     return repo.findOne({ where: { userId, status: 'pending' } });
+  }
+
+  async findPendingByProvider(provider: PaymentProvider): Promise<Payment[]> {
+    const repo = await this.getRepo();
+    return repo.find({
+      where: { provider, status: 'pending' },
+      order: { createdAt: 'ASC' },
+    });
   }
 
   async findAll(): Promise<Payment[]> {

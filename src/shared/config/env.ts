@@ -31,6 +31,8 @@ const envSchema = z.object({
   YOOKASSA_SHOP_ID: z.string().optional(),
   YOOKASSA_SECRET_KEY: z.string().optional(),
   YOOKASSA_WEBHOOK_URL: z.string().optional(),
+  /** Интервал опроса ЮKassa для pending-платежей (мс). 0 — отключить (нужен webhook). */
+  YOOKASSA_POLL_INTERVAL_MS: z.coerce.number().default(45000),
   TELEGRAM_PROVIDER_TOKEN: z.string().optional(),
   PAYMENT_PENDING_TTL_MINUTES: z.coerce.number().default(10),
 
