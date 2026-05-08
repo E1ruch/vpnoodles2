@@ -23,10 +23,9 @@ import {
   vpnActionsKeyboard,
   trialConfirmKeyboard,
   backToMainKeyboard,
-  adminKeyboard,
-  adminBackKeyboard,
 } from './keyboards.js';
 import { YooKassaService } from '../../infrastructure/payments/YooKassaService.js';
+import { AdminHandlers } from './admin/AdminHandlers.js';
 
 export class BotHandlers {
   private bot: Telegraf;
@@ -43,6 +42,7 @@ export class BotHandlers {
   private qrCodeService: IQRCodeService;
   private paymentService: IPaymentService;
   private yooKassaService: YooKassaService;
+  private adminHandlers: AdminHandlers;
 
   constructor(
     bot: Telegraf,
@@ -73,11 +73,17 @@ export class BotHandlers {
     this.qrCodeService = qrCodeService;
     this.paymentService = paymentService;
     this.yooKassaService = new YooKassaService();
+    this.adminHandlers = new AdminHandlers(
+      this.userRepo,
+      this.planRepo,
+      this.subscriptionRepo,
+      this.paymentRepo,
+      this.auditLogRepo,
+    );
   }
 
   register(): void {
     this.bot.start(this.handleStart);
-    this.bot.command('admin', this.handleAdmin);
     this.bot.action('back_main', this.handleBackMain);
     this.bot.action('my_vpn', this.handleMyVpn);
     this.bot.action('plans', this.handlePlans);
@@ -90,11 +96,7 @@ export class BotHandlers {
     this.bot.action(/^buy_(.+)$/, this.handleBuyPlan);
     this.bot.action(/^renew_(.+)$/, this.handleRenew);
     this.bot.action(/^pay_(stars|yookassa)_(.+)$/, this.handlePaymentMethod);
-    this.bot.action('admin_menu', this.handleAdmin);
-    this.bot.action('admin_users', this.handleAdminUsers);
-    this.bot.action('admin_stats', this.handleAdminStats);
-    this.bot.action('admin_logs', this.handleAdminLogs);
-    this.bot.action('admin_subscriptions', this.handleAdminSubscriptions);
+    this.adminHandlers.register(this.bot);
 
     // Telegram Stars payment handlers
     this.bot.on('shipping_query', this.handleShippingQuery);
@@ -106,31 +108,6 @@ export class BotHandlers {
       const logger = getLogger();
       logger.error({ err }, 'Bot error');
     });
-  }
-
-  private isAdmin(ctx: Context): boolean {
-    const env = getEnv();
-    const telegramId = ctx.from?.id;
-    if (!telegramId) return false;
-
-    const adminIds = new Set<number>();
-
-    if (typeof env.ADMIN_TELEGRAM_ID === 'number' && Number.isFinite(env.ADMIN_TELEGRAM_ID)) {
-      adminIds.add(env.ADMIN_TELEGRAM_ID);
-    }
-
-    const idsFromEnv = (env.ADMIN_TELEGRAM_IDS ?? '')
-      .split(',')
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0)
-      .map((id) => Number(id))
-      .filter((id) => Number.isFinite(id));
-
-    for (const id of idsFromEnv) {
-      adminIds.add(id);
-    }
-
-    return adminIds.has(telegramId);
   }
 
   private handleStart = async (ctx: Context): Promise<void> => {
@@ -708,84 +685,4 @@ export class BotHandlers {
     }
   };
 
-  private handleAdminUsers = async (ctx: Context): Promise<void> => {
-    if (!this.isAdmin(ctx)) return;
-
-    try {
-      const users = await this.userRepo.findAll();
-      let text = `👥 Пользователи (${users.length}):\n\n`;
-      users.slice(0, 10).forEach((user: any, index: number) => {
-        text += `${index + 1}. ${user.firstName} (@${user.username || 'нет'}) - ${formatDate(user.createdAt)}\n`;
-      });
-      if (users.length > 10) text += `\n... и ещё ${users.length - 10} пользователей`;
-
-      await ctx.editMessageText(text, { reply_markup: adminBackKeyboard() });
-    } catch (err) {
-      await ctx.reply('❌ Ошибка загрузки пользователей');
-    }
-  };
-
-  private handleAdminStats = async (ctx: Context): Promise<void> => {
-    if (!this.isAdmin(ctx)) return;
-
-    try {
-      const usersCount = await this.userRepo.count();
-      const subscriptionsCount = await this.subscriptionRepo.count();
-      const paymentsCount = await this.paymentRepo.count();
-      const logsCount = await this.auditLogRepo.count();
-
-      const text = `📊 Статистика:\n\n👥 Пользователей: ${usersCount}\n💳 Подписок: ${subscriptionsCount}\n💰 Платежей: ${paymentsCount}\n📋 Логов: ${logsCount}`;
-
-      await ctx.editMessageText(text, { reply_markup: adminBackKeyboard() });
-    } catch (err) {
-      await ctx.reply('❌ Ошибка загрузки статистики');
-    }
-  };
-
-  private handleAdminLogs = async (ctx: Context): Promise<void> => {
-    if (!this.isAdmin(ctx)) return;
-
-    try {
-      const logs = await this.auditLogRepo.findAll({ limit: 10, order: { createdAt: 'DESC' } });
-      let text = `📋 Последние логи (${logs.length}):\n\n`;
-      logs.forEach((log: any, index: number) => {
-        text += `${index + 1}. ${log.action} - ${log.entityType || ''} (${formatDate(log.createdAt)})\n`;
-      });
-
-      await ctx.editMessageText(text, { reply_markup: adminBackKeyboard() });
-    } catch (err) {
-      await ctx.reply('❌ Ошибка загрузки логов');
-    }
-  };
-
-  private handleAdminSubscriptions = async (ctx: Context): Promise<void> => {
-    if (!this.isAdmin(ctx)) return;
-
-    try {
-      const subscriptions = await this.subscriptionRepo.findAll();
-      let text = `💳 Подписки (${subscriptions.length}):\n\n`;
-      for (let i = 0; i < Math.min(10, subscriptions.length); i++) {
-        const sub: any = subscriptions[i];
-        const plan = await this.planRepo.findById(sub.planId);
-        const planName = plan?.name || 'Неизвестно';
-        text += `${i + 1}. План: ${planName}, Статус: ${sub.status}, До: ${formatDate(sub.endDate)}\n`;
-      }
-      if (subscriptions.length > 10) text += `\n... и ещё ${subscriptions.length - 10} подписок`;
-
-      await ctx.editMessageText(text, { reply_markup: adminBackKeyboard() });
-    } catch (err) {
-      await ctx.reply('❌ Ошибка загрузки подписок');
-    }
-  };
-
-  private handleAdmin = async (ctx: Context): Promise<void> => {
-    if (!this.isAdmin(ctx)) {
-      await ctx.reply('❌ Доступ запрещен');
-      return;
-    }
-
-    await ctx.reply('🔧 Админ-панель', {
-      reply_markup: adminKeyboard(),
-    });
-  };
 }
