@@ -95,25 +95,7 @@ async function bootstrap(): Promise<void> {
       res.end(JSON.stringify({ error: 'Not found' }));
     });
 
-    // Start bot
-    if (env.TELEGRAM_WEBHOOK_URL) {
-      // Webhook mode for production
-      const webhookPath = `/bot${env.TELEGRAM_BOT_TOKEN}`;
-      await container.bot.telegram.setWebhook(env.TELEGRAM_WEBHOOK_URL + webhookPath);
-      const webhookInfo = await container.bot.telegram.getWebhookInfo();
-      logger.info({ webhookInfo }, 'Bot started with webhook');
-    } else {
-      // Polling mode for development
-      await container.bot.launch();
-      logger.info('Bot started with polling');
-    }
-
-    // Start HTTP server
     const port = env.PORT;
-    server.listen(port, () => {
-      logger.info({ port }, 'HTTP server started');
-      logger.info(`YooKassa webhook URL: http://your-domain.com/webhook/yookassa`);
-    });
 
     const pollMs = env.YOOKASSA_POLL_INTERVAL_MS;
     if (pollMs > 0 && yooKassaService.isConfigured()) {
@@ -138,7 +120,6 @@ async function bootstrap(): Promise<void> {
       logger.info('YooKassa polling disabled (YOOKASSA_POLL_INTERVAL_MS=0); use webhook for redirect payments');
     }
 
-    // Graceful shutdown
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Shutting down...');
       container.bot.stop(signal);
@@ -150,6 +131,25 @@ async function bootstrap(): Promise<void> {
 
     process.once('SIGINT', () => shutdown('SIGINT'));
     process.once('SIGTERM', () => shutdown('SIGTERM'));
+
+    server.listen(port, () => {
+      logger.info({ port }, 'HTTP server started');
+      logger.info(`YooKassa webhook URL: http://your-domain.com/webhook/yookassa`);
+    });
+
+    if (env.TELEGRAM_WEBHOOK_URL) {
+      const webhookPath = `/bot${env.TELEGRAM_BOT_TOKEN}`;
+      await container.bot.telegram.setWebhook(env.TELEGRAM_WEBHOOK_URL + webhookPath);
+      const webhookInfo = await container.bot.telegram.getWebhookInfo();
+      logger.info({ webhookInfo }, 'Bot started with webhook');
+    } else {
+      // Long polling: do not await — Telegraf blocks inside startPolling() until the bot stops.
+      void container.bot.launch().catch((err) => {
+        logger.error({ err }, 'Telegram bot launch failed');
+        process.exit(1);
+      });
+      logger.info('Telegram long polling launch initiated');
+    }
 
     logger.info('VPNoodles bot is running!');
   } catch (error) {
