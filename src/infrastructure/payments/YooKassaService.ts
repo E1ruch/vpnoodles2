@@ -73,6 +73,56 @@ export class YooKassaService {
     return payment.confirmation?.confirmation_url;
   }
 
+  /**
+   * Ищет платёж в ЮKassa по metadata.internalPaymentId (UUID нашей строки в payments).
+   * Нужен для polling без webhook и если в БД потеряли externalPaymentId.
+   */
+  async resolvePaymentByOurInternalId(internalPaymentId: string): Promise<YooKassaPayment | null> {
+    const logger = getLogger();
+
+    if (!this.isConfigured()) {
+      throw new PaymentError('YooKassa is not configured');
+    }
+
+    let cursor: string | undefined;
+    const maxPages = 8;
+
+    for (let page = 0; page < maxPages; page++) {
+      const url = new URL('https://api.yookassa.ru/v3/payments');
+      url.searchParams.set('limit', '50');
+      if (cursor) url.searchParams.set('cursor', cursor);
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${Buffer.from(`${this.shopId}:${this.secretKey}`).toString('base64')}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ status: response.status, error: errorText }, 'YooKassa list payments error');
+        throw new PaymentError(`YooKassa API error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        items?: YooKassaPayment[];
+        next_cursor?: string;
+      };
+
+      const found = data.items?.find(
+        (item) => item.metadata?.['internalPaymentId'] === internalPaymentId,
+      );
+      if (found) return found;
+
+      cursor = data.next_cursor;
+      if (!cursor) break;
+    }
+
+    return null;
+  }
+
   async createPayment(options: CreatePaymentOptions): Promise<PaymentResult> {
     const logger = getLogger();
 

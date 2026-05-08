@@ -25,6 +25,7 @@ import {
   backToMainKeyboard,
 } from './keyboards.js';
 import { YooKassaService } from '../../infrastructure/payments/YooKassaService.js';
+import { runYooKassaFulfillmentTick } from '../../infrastructure/payments/yooKassaFulfillment.js';
 import { AdminHandlers } from './admin/AdminHandlers.js';
 
 export class BotHandlers {
@@ -84,6 +85,7 @@ export class BotHandlers {
 
   register(): void {
     this.bot.start(this.handleStart);
+    this.bot.command('check_payment', this.handleCheckPayment);
     this.bot.action('back_main', this.handleBackMain);
     this.bot.action('my_vpn', this.handleMyVpn);
     this.bot.action('plans', this.handlePlans);
@@ -137,6 +139,50 @@ export class BotHandlers {
       }
     } catch (err) {
       logger.error({ err }, 'Error in /start handler');
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleCheckPayment = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      if (!this.yooKassaService.isConfigured()) {
+        await ctx.reply(Texts.CHECK_PAYMENT_YOOKASSA_DISABLED, { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const { fulfilled } = await runYooKassaFulfillmentTick(
+        {
+          paymentRepo: this.paymentRepo,
+          purchasePlanUseCase: this.purchasePlan,
+          userRepo: this.userRepo,
+          qrCodeService: this.qrCodeService,
+          bot: this.bot,
+        },
+        this.yooKassaService,
+        { filterUserId: user.id },
+      );
+
+      if (fulfilled > 0) {
+        return;
+      }
+
+      const pending = await this.paymentRepo.findPendingByUserId(user.id);
+      if (pending?.provider === 'yookassa') {
+        await ctx.reply(Texts.CHECK_PAYMENT_STILL_PENDING, { reply_markup: backToMainKeyboard() });
+      } else if (pending?.provider === 'stars') {
+        await ctx.reply(Texts.CHECK_PAYMENT_STARS_PENDING, { reply_markup: backToMainKeyboard() });
+      } else {
+        await ctx.reply(Texts.CHECK_PAYMENT_NO_PENDING, { reply_markup: backToMainKeyboard() });
+      }
+    } catch (err) {
+      logger.error({ err }, 'Error in /check_payment handler');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };
@@ -426,7 +472,7 @@ export class BotHandlers {
             await ctx.reply(
               `💳 Telegram-платежи временно недоступны, используем резервный способ.\n\n` +
                 `Оплатите по ссылке:\n${paymentUrl}\n\n` +
-                `После оплаты доступ активируется в течение минуты (проверка статуса в ЮKassa). Также можно нажать /start.`,
+                `После оплаты доступ активируется в течение минуты (проверка в ЮKassa). Можно отправить /check_payment.`,
               { reply_markup: backToMainKeyboard() },
             );
           } else {

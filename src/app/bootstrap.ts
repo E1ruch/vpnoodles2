@@ -1,61 +1,12 @@
 import 'reflect-metadata';
 import 'dotenv/config';
 import http from 'http';
-import { Buffer } from 'node:buffer';
 import { getDataSource, closeDataSource } from '../infrastructure/db/connection.js';
 import { createContainer } from './container.js';
-import type { AppContainer } from './container.js';
 import { getLogger } from '../shared/logger/index.js';
 import { getEnv } from '../shared/config/env.js';
 import { YooKassaService } from '../infrastructure/payments/YooKassaService.js';
-import { Texts } from '../transport/telegram/texts.js';
-import { backToMainKeyboard } from '../transport/telegram/keyboards.js';
-
-async function pollYooKassaPendingPayments(container: AppContainer, yooKassa: YooKassaService): Promise<void> {
-  const logger = getLogger();
-  if (!yooKassa.isConfigured()) return;
-
-  const pending = await container.paymentRepo.findPendingByProvider('yookassa');
-  for (const p of pending) {
-    const ext = p.externalPaymentId;
-    if (!ext || ext.startsWith('http')) continue;
-
-    try {
-      const remote = await yooKassa.fetchPayment(ext);
-      if (remote.status === 'succeeded') {
-        const result = await container.purchasePlanUseCase.execute(p.userId, p.planId, 'yookassa', {
-          existingPaymentId: p.id,
-          externalChargeId: ext,
-        });
-        const user = await container.userRepo.findById(p.userId);
-        if (user) {
-          try {
-            await container.bot.telegram.sendMessage(user.telegramId, Texts.PAYMENT_SUCCESS);
-            const qrCode = await container.qrCodeService.generateBase64(result.subscriptionUrl);
-            const qrBase64 = qrCode.split(',')[1] ?? '';
-            await container.bot.telegram.sendPhoto(
-              user.telegramId,
-              { source: Buffer.from(qrBase64, 'base64') },
-              {
-                caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl),
-              },
-            );
-            await container.bot.telegram.sendMessage(user.telegramId, Texts.INSTRUCTIONS, {
-              reply_markup: backToMainKeyboard(),
-            });
-          } catch (notifyErr) {
-            logger.warn({ notifyErr, telegramId: user.telegramId }, 'Failed to notify user after YooKassa poll');
-          }
-        }
-        logger.info({ paymentId: p.id, userId: p.userId }, 'YooKassa payment fulfilled via polling');
-      } else if (remote.status === 'canceled') {
-        await container.paymentRepo.update(p.id, { status: 'failed' });
-      }
-    } catch (err) {
-      logger.warn({ err, paymentId: p.id }, 'YooKassa poll tick failed');
-    }
-  }
-}
+import { runYooKassaFulfillmentTick } from '../infrastructure/payments/yooKassaFulfillment.js';
 
 async function bootstrap(): Promise<void> {
   const logger = getLogger();
@@ -167,9 +118,16 @@ async function bootstrap(): Promise<void> {
     const pollMs = env.YOOKASSA_POLL_INTERVAL_MS;
     if (pollMs > 0 && yooKassaService.isConfigured()) {
       const tick = () => {
-        pollYooKassaPendingPayments(container, yooKassaService).catch((err) =>
-          logger.warn({ err }, 'YooKassa poll run failed'),
-        );
+        runYooKassaFulfillmentTick(
+          {
+            paymentRepo: container.paymentRepo,
+            purchasePlanUseCase: container.purchasePlanUseCase,
+            userRepo: container.userRepo,
+            qrCodeService: container.qrCodeService,
+            bot: container.bot,
+          },
+          yooKassaService,
+        ).catch((err) => logger.warn({ err }, 'YooKassa poll run failed'));
       };
       setInterval(tick, pollMs);
       setTimeout(tick, 8000);
