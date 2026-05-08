@@ -155,7 +155,7 @@ export class AdminHandlers {
       return;
     }
 
-    await ctx.reply('🔧 Админ-панель', {
+    await ctx.reply('🔧 Админ-панель v. 1.2', {
       reply_markup: adminKeyboard(),
     });
   };
