@@ -8,6 +8,7 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
   ADMIN_TELEGRAM_ID: z.coerce.number().optional(),
+  ADMIN_TELEGRAM_IDS: z.string().optional(),
 
   // Database
   DATABASE_URL: z.string().min(1),

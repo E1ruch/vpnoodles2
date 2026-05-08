@@ -104,6 +104,31 @@ export class BotHandlers {
     });
   }
 
+  private isAdmin(ctx: Context): boolean {
+    const env = getEnv();
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return false;
+
+    const adminIds = new Set<number>();
+
+    if (typeof env.ADMIN_TELEGRAM_ID === 'number' && Number.isFinite(env.ADMIN_TELEGRAM_ID)) {
+      adminIds.add(env.ADMIN_TELEGRAM_ID);
+    }
+
+    const idsFromEnv = (env.ADMIN_TELEGRAM_IDS ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0)
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id));
+
+    for (const id of idsFromEnv) {
+      adminIds.add(id);
+    }
+
+    return adminIds.has(telegramId);
+  }
+
   private handleStart = async (ctx: Context): Promise<void> => {
     const logger = getLogger();
     try {
@@ -634,8 +659,7 @@ export class BotHandlers {
   };
 
   private handleAdminUsers = async (ctx: Context): Promise<void> => {
-    const env = getEnv();
-    if (!env.ADMIN_TELEGRAM_ID || ctx.from?.id !== env.ADMIN_TELEGRAM_ID) return;
+    if (!this.isAdmin(ctx)) return;
 
     try {
       const users = await this.userRepo.findAll();
@@ -652,8 +676,7 @@ export class BotHandlers {
   };
 
   private handleAdminStats = async (ctx: Context): Promise<void> => {
-    const env = getEnv();
-    if (!env.ADMIN_TELEGRAM_ID || ctx.from?.id !== env.ADMIN_TELEGRAM_ID) return;
+    if (!this.isAdmin(ctx)) return;
 
     try {
       const usersCount = await this.userRepo.count();
@@ -670,8 +693,7 @@ export class BotHandlers {
   };
 
   private handleAdminLogs = async (ctx: Context): Promise<void> => {
-    const env = getEnv();
-    if (!env.ADMIN_TELEGRAM_ID || ctx.from?.id !== env.ADMIN_TELEGRAM_ID) return;
+    if (!this.isAdmin(ctx)) return;
 
     try {
       const logs = await this.auditLogRepo.findAll({ limit: 10, order: { createdAt: 'DESC' } });
@@ -687,8 +709,7 @@ export class BotHandlers {
   };
 
   private handleAdminSubscriptions = async (ctx: Context): Promise<void> => {
-    const env = getEnv();
-    if (!env.ADMIN_TELEGRAM_ID || ctx.from?.id !== env.ADMIN_TELEGRAM_ID) return;
+    if (!this.isAdmin(ctx)) return;
 
     try {
       const subscriptions = await this.subscriptionRepo.findAll();
@@ -708,8 +729,7 @@ export class BotHandlers {
   };
 
   private handleAdmin = async (ctx: Context): Promise<void> => {
-    const env = getEnv();
-    if (!env.ADMIN_TELEGRAM_ID || ctx.from?.id !== env.ADMIN_TELEGRAM_ID) {
+    if (!this.isAdmin(ctx)) {
       await ctx.reply('❌ Доступ запрещен');
       return;
     }

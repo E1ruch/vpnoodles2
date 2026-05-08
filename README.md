@@ -79,6 +79,10 @@ npm run dev
 # Запустить всё (app + postgres + redis)
 docker compose up -d
 
+#Обновить и перезапустить
+git pull
+docker compose up -d --build app
+
 # Применить миграции
 docker compose exec app npm run migrate
 docker compose exec app npm run seed
