@@ -100,8 +100,7 @@ export class BotHandlers {
     this.bot.action(/^pay_(stars|yookassa)_(.+)$/, this.handlePaymentMethod);
     this.adminHandlers.register(this.bot);
 
-    // Telegram Stars payment handlers
-    this.bot.on('shipping_query', this.handleShippingQuery);
+    // Telegram payment handlers (Stars / ЮKassa через provider_token)
     this.bot.on('pre_checkout_query', this.handlePreCheckout);
     this.bot.on('successful_payment', this.handleSuccessfulPayment);
 
@@ -488,33 +487,6 @@ export class BotHandlers {
     }
   };
 
-  private handleShippingQuery = async (ctx: Context): Promise<void> => {
-    const logger = getLogger();
-    try {
-      const query = ctx.update && 'shipping_query' in ctx.update ? ctx.update.shipping_query : null;
-      if (!query) return;
-
-      await ctx.telegram.answerShippingQuery(
-        query.id,
-        true,
-        [
-          {
-            id: 'digital_delivery',
-            title: 'Цифровая доставка',
-            prices: [{ label: 'Доставка', amount: 0 }],
-          },
-        ],
-        undefined,
-      );
-    } catch (err) {
-      logger.error({ err }, 'Error in shipping_query');
-      const query = ctx.update && 'shipping_query' in ctx.update ? ctx.update.shipping_query : null;
-      if (query) {
-        await ctx.telegram.answerShippingQuery(query.id, false, undefined, 'Не удалось рассчитать доставку');
-      }
-    }
-  };
-
   private handleInstructions = async (ctx: Context): Promise<void> => {
     try {
       const telegramUser = ctx.from;
@@ -648,6 +620,14 @@ export class BotHandlers {
 
       if (!plan || !payment || !user) {
         await ctx.answerPreCheckoutQuery(false, 'Платеж не найден или недоступен.');
+        return;
+      }
+
+      const expectedCurrency = provider === 'stars' ? 'XTR' : 'RUB';
+      const expectedAmount =
+        provider === 'stars' ? plan.priceStars : Math.round(plan.priceRub * 100);
+      if (query.currency !== expectedCurrency || query.total_amount !== expectedAmount) {
+        await ctx.answerPreCheckoutQuery(false, 'Неверная сумма или валюта платежа.');
         return;
       }
 

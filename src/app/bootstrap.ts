@@ -29,6 +29,10 @@ async function bootstrap(): Promise<void> {
     // Create YooKassa service
     const yooKassaService = new YooKassaService();
 
+    /** Путь должен совпадать с тем, что передаётся в setWebhook (TELEGRAM_WEBHOOK_URL + path). */
+    const telegramWebhookPath = `/bot${env.TELEGRAM_BOT_TOKEN}`;
+    const telegramWebhookHandler = container.bot.webhookCallback(telegramWebhookPath);
+
     // Create HTTP server for webhooks
     const server = http.createServer(async (req, res) => {
       const url = req.url ?? '';
@@ -84,10 +88,24 @@ async function bootstrap(): Promise<void> {
         return;
       }
 
-      // Telegram webhook
-      if (url.startsWith(`/bot${env.TELEGRAM_BOT_TOKEN}`) && method === 'POST') {
-        // Let telegraf handle it
-        return;
+      // Telegram: POST с телом Update → Telegraf (pre_checkout_query, successful_payment, сообщения…)
+      if (method === 'POST') {
+        const pathOnly = url.split('?')[0] ?? '';
+        if (pathOnly === telegramWebhookPath) {
+          try {
+            await telegramWebhookHandler(req, res, () => {
+              res.writeHead(404, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Not found' }));
+            });
+          } catch (error) {
+            logger.error({ error }, 'Telegram webhook handler failed');
+            if (!res.writableEnded) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Internal server error' }));
+            }
+          }
+          return;
+        }
       }
 
       // 404 for unknown routes
@@ -138,8 +156,7 @@ async function bootstrap(): Promise<void> {
     });
 
     if (env.TELEGRAM_WEBHOOK_URL) {
-      const webhookPath = `/bot${env.TELEGRAM_BOT_TOKEN}`;
-      await container.bot.telegram.setWebhook(env.TELEGRAM_WEBHOOK_URL + webhookPath);
+      await container.bot.telegram.setWebhook(env.TELEGRAM_WEBHOOK_URL + telegramWebhookPath);
       const webhookInfo = await container.bot.telegram.getWebhookInfo();
       logger.info({ webhookInfo }, 'Bot started with webhook');
     } else {
