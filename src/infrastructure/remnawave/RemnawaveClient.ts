@@ -28,7 +28,7 @@ interface RemnawaveUser {
   description: string;
   tag: string;
   hwidDeviceLimit: number;
-  activeInternalSquads: string[];
+  activeInternalSquads: Array<string | { uuid?: string; id?: string; name?: string }>;
   externalSquadUuid: string | null;
   subscriptionUrl?: string;
 }
@@ -180,10 +180,23 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId }, 'Suspending Remnawave user');
 
     await this.withRetry(async () => {
+      const currentUser = await this.getUser(remnawaveUserId);
       const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
         status: 'DISABLED',
+        trafficLimitBytes: currentUser.trafficLimitBytes,
+        trafficLimitStrategy: currentUser.trafficLimitStrategy,
+        expireAt: currentUser.expireAt,
+        description: currentUser.description,
+        tag: currentUser.tag,
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
+        hwidDeviceLimit: currentUser.hwidDeviceLimit,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+        externalSquadUuid: currentUser.externalSquadUuid,
       };
-      await this.request<RemnawaveUser>('PATCH', `/api/users/${remnawaveUserId}`, payload);
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId }, 'Remnawave user suspended');
     });
   }
@@ -193,10 +206,23 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId }, 'Resuming Remnawave user');
 
     await this.withRetry(async () => {
+      const currentUser = await this.getUser(remnawaveUserId);
       const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
         status: 'ACTIVE',
+        trafficLimitBytes: currentUser.trafficLimitBytes,
+        trafficLimitStrategy: currentUser.trafficLimitStrategy,
+        expireAt: currentUser.expireAt,
+        description: currentUser.description,
+        tag: currentUser.tag,
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
+        hwidDeviceLimit: currentUser.hwidDeviceLimit,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+        externalSquadUuid: currentUser.externalSquadUuid,
       };
-      await this.request<RemnawaveUser>('PATCH', `/api/users/${remnawaveUserId}`, payload);
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId }, 'Remnawave user resumed');
     });
   }
@@ -229,10 +255,23 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId, limit }, 'Updating device limit');
 
     await this.withRetry(async () => {
+      const currentUser = await this.getUser(remnawaveUserId);
       const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
+        status: currentUser.status,
+        trafficLimitBytes: currentUser.trafficLimitBytes,
+        trafficLimitStrategy: currentUser.trafficLimitStrategy,
+        expireAt: currentUser.expireAt,
+        description: currentUser.description,
+        tag: currentUser.tag,
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
         hwidDeviceLimit: limit,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+        externalSquadUuid: currentUser.externalSquadUuid,
       };
-      await this.request<RemnawaveUser>('PATCH', `/api/users/${remnawaveUserId}`, payload);
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId, limit }, 'Device limit updated');
     });
   }
@@ -242,10 +281,23 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId, tag }, 'Updating user tag');
 
     await this.withRetry(async () => {
+      const currentUser = await this.getUser(remnawaveUserId);
       const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
+        status: currentUser.status,
+        trafficLimitBytes: currentUser.trafficLimitBytes,
+        trafficLimitStrategy: currentUser.trafficLimitStrategy,
+        expireAt: currentUser.expireAt,
+        description: currentUser.description,
         tag,
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
+        hwidDeviceLimit: currentUser.hwidDeviceLimit,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+        externalSquadUuid: currentUser.externalSquadUuid,
       };
-      await this.request<RemnawaveUser>('PATCH', `/api/users/${remnawaveUserId}`, payload);
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId, tag }, 'User tag updated');
     });
   }
@@ -268,9 +320,21 @@ export class RemnawaveClient implements IRemnawaveService {
       );
 
       const payload: RemnawaveUpdateUserPayload = {
+        uuid: remnawaveUserId,
+        username: currentUser.username,
+        status: currentUser.status,
+        trafficLimitBytes: currentUser.trafficLimitBytes,
+        trafficLimitStrategy: currentUser.trafficLimitStrategy,
         expireAt: newExpiry.toISOString(),
+        description: currentUser.description,
+        tag: currentUser.tag,
+        telegramId: currentUser.telegramId,
+        email: currentUser.email,
+        hwidDeviceLimit: currentUser.hwidDeviceLimit,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+        externalSquadUuid: currentUser.externalSquadUuid,
       };
-      await this.request<RemnawaveUser>('PATCH', `/api/users/${remnawaveUserId}`, payload);
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info(
         { remnawaveUserId, days, newExpiry: newExpiry.toISOString() },
         'User subscription extended',
@@ -293,11 +357,7 @@ export class RemnawaveClient implements IRemnawaveService {
 
     await this.withRetry(async () => {
       // Сначала получаем текущего пользователя для получения username
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
-        'GET',
-        `/api/users/${remnawaveUserId}`,
-      );
-      const currentUser = raw.response;
+      const currentUser = await this.getUser(remnawaveUserId);
 
       const payload: RemnawaveUpdateUserPayload = {
         uuid: remnawaveUserId,
@@ -311,12 +371,32 @@ export class RemnawaveClient implements IRemnawaveService {
         telegramId: currentUser.telegramId,
         email: currentUser.email,
         description: currentUser.description,
-        activeInternalSquads: currentUser.activeInternalSquads,
+        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
         externalSquadUuid: currentUser.externalSquadUuid,
       };
       await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
     });
+  }
+
+  private async getUser(remnawaveUserId: string): Promise<RemnawaveUser> {
+    const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
+      'GET',
+      `/api/users/${remnawaveUserId}`,
+    );
+    return raw.response;
+  }
+
+  private normalizeInternalSquads(
+    squads: Array<string | { uuid?: string; id?: string; name?: string }> | undefined,
+  ): string[] {
+    if (!Array.isArray(squads)) return [];
+    return squads
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        return item.uuid ?? item.id ?? null;
+      })
+      .filter((value): value is string => Boolean(value));
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -105,6 +105,7 @@ export function createContainer(): AppContainer {
     activateTrialUseCase,
     getSubscriptionUseCase,
     purchasePlanUseCase,
+    renewSubscriptionUseCase,
     userRepo,
     planRepo,
     subscriptionRepo,

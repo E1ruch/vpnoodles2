@@ -3,8 +3,7 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { ValidationError, SubscriptionError } from '../../shared/errors/index.js';
-import { daysFromNow } from '../../shared/utils/index.js';
+import { ValidationError, SubscriptionError, RemnawaveError } from '../../shared/errors/index.js';
 
 export class RenewSubscriptionUseCase {
   constructor(
@@ -30,7 +29,8 @@ export class RenewSubscriptionUseCase {
     if (!plan) throw new ValidationError('Plan not found');
 
     const currentEnd = subscription.endDate > new Date() ? subscription.endDate : new Date();
-    const newEndDate = daysFromNow(additionalDays);
+    const newEndDate = new Date(currentEnd);
+    newEndDate.setDate(newEndDate.getDate() + additionalDays);
 
     await this.subscriptionRepo.update(subscriptionId, {
       status: 'active',
@@ -39,11 +39,24 @@ export class RenewSubscriptionUseCase {
 
     // Extend in Remnawave and update tag
     if (subscription.remnawaveUserId) {
-      await this.remnawaveService.resumeUser(subscription.remnawaveUserId);
-      await this.remnawaveService.extendUser(subscription.remnawaveUserId, additionalDays);
-      // Update tag to match new plan (e.g., TRIAL -> 1_MONTH)
-      const newTag = plan.remnawaveTag ?? 'PAID';
-      await this.remnawaveService.updateUserTag(subscription.remnawaveUserId, newTag);
+      try {
+        await this.remnawaveService.resumeUser(subscription.remnawaveUserId);
+        await this.remnawaveService.extendUser(subscription.remnawaveUserId, additionalDays);
+        // Update tag to match new plan (e.g., TRIAL -> 1_MONTH)
+        const newTag = plan.remnawaveTag ?? 'PAID';
+        await this.remnawaveService.updateUserTag(subscription.remnawaveUserId, newTag);
+      } catch (error) {
+        const isMissingUserError =
+          error instanceof RemnawaveError &&
+          (error.message.includes('404') || error.message.includes('A063'));
+
+        if (!isMissingUserError) {
+          throw error;
+        }
+        throw new RemnawaveError(
+          `Remnawave user is missing for subscription ${subscriptionId}. Manual resync required.`,
+        );
+      }
     }
 
     await this.auditLogRepo.create({
