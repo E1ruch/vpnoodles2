@@ -1,8 +1,8 @@
+import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { RemnawaveError } from '../../shared/errors/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import { sleep } from '../../shared/utils/index.js';
-import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 
 // Remnawave API response types
 // API возвращает ответы в формате { response: ... }
@@ -377,6 +377,29 @@ export class RemnawaveClient implements IRemnawaveService {
       await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
       logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
     });
+  }
+
+  async getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number> {
+    const logger = getLogger();
+    interface HwidDevicesPayload {
+      total: number;
+      devices?: unknown[];
+    }
+
+    try {
+      const raw = await this.request<RemnawaveApiResponse<HwidDevicesPayload>>(
+        'GET',
+        `/api/hwid/devices/${encodeURIComponent(remnawaveUserUuid)}`,
+      );
+      const total = raw.response?.total;
+      return typeof total === 'number' && Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+    } catch (error) {
+      if (error instanceof RemnawaveError && error.message.includes('404')) {
+        logger.info({ remnawaveUserUuid }, 'Remnawave HWID total: 404 → 0');
+        return 0;
+      }
+      throw error;
+    }
   }
 
   private async getUser(remnawaveUserId: string): Promise<RemnawaveUser> {

@@ -19,6 +19,8 @@ export interface PurchaseResult {
   qrCodeBase64: string;
 }
 
+import type { SyncSubscriptionDevicesUseCase } from './SyncSubscriptionDevicesUseCase.js';
+
 export class PurchasePlanUseCase {
   constructor(
     private userRepo: IUserRepository,
@@ -29,6 +31,7 @@ export class PurchasePlanUseCase {
     private remnawaveService: IRemnawaveService,
     private paymentService: IPaymentService,
     private qrCodeService: IQRCodeService,
+    private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
   ) {}
 
   async execute(
@@ -179,6 +182,8 @@ export class PurchasePlanUseCase {
         `${provider}_${paymentResult.paymentId}`;
       await this.paymentService.markAsCompleted(fulfillmentPaymentId, externalId);
     }
+
+    await this.syncSubscriptionDevices.execute(subscription.id);
 
     logger.info({ userId, subscriptionId: subscription.id, planId }, 'Plan purchased');
     return { subscriptionId: subscription.id, subscriptionUrl, qrCodeBase64 };

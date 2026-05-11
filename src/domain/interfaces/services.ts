@@ -31,6 +31,8 @@ export interface IRemnawaveService {
       expireAt: Date;
     },
   ): Promise<void>;
+  /** GET /api/hwid/devices/{userUuid} → response.total (количество устройств). */
+  getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number>;
 }
 
 export interface IPaymentService {

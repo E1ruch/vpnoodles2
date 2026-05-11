@@ -1,5 +1,5 @@
-import { ActivateTrialUseCase } from '../../src/application/usecases/ActivateTrialUseCase.js';
-import { SubscriptionError, ValidationError } from '../../src/shared/errors/index.js';
+import { ActivateTrialUseCase } from '../../src/application/usecases/ActivateTrialUseCase';
+import { SubscriptionError, ValidationError } from '../../src/shared/errors/index';
 
 // Mock repositories
 const mockUserRepo = {
@@ -38,6 +38,11 @@ const mockRemnawaveService = {
   getSubscriptionUrl: jest.fn(),
   updateDeviceLimit: jest.fn(),
   extendUser: jest.fn(),
+  getHwidDeviceTotal: jest.fn().mockResolvedValue(0),
+};
+
+const mockSyncSubscriptionDevices = {
+  execute: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('ActivateTrialUseCase', () => {
@@ -51,6 +56,7 @@ describe('ActivateTrialUseCase', () => {
       mockSubscriptionRepo as never,
       mockAuditLogRepo as never,
       mockRemnawaveService as never,
+      mockSyncSubscriptionDevices as never,
     );
   });
 
@@ -59,22 +65,42 @@ describe('ActivateTrialUseCase', () => {
     await expect(useCase.execute('nonexistent-id')).rejects.toThrow(ValidationError);
   });
 
-  it('should throw SubscriptionError if trial already used', async () => {
+  it('should throw SubscriptionError if trial already exists', async () => {
+    const trialPlan = {
+      id: 'plan-trial',
+      name: 'Бесплатный',
+      type: 'trial',
+      durationDays: 3,
+      deviceLimit: 1,
+    };
     mockUserRepo.findById.mockResolvedValue({
       id: 'user-1',
       telegramId: 123,
-      hasUsedTrial: true,
+      hasUsedTrial: false,
     });
+    mockSubscriptionRepo.findActiveByUserId.mockResolvedValue(null);
+    mockPlanRepo.findByType.mockResolvedValue([trialPlan]);
+    mockSubscriptionRepo.findByUserId.mockResolvedValue([{ planId: 'plan-trial' }]);
+
     await expect(useCase.execute('user-1')).rejects.toThrow(SubscriptionError);
   });
 
   it('should throw SubscriptionError if user has active subscription', async () => {
+    const trialPlan = {
+      id: 'plan-trial',
+      name: 'Бесплатный',
+      type: 'trial',
+      durationDays: 3,
+      deviceLimit: 1,
+    };
     mockUserRepo.findById.mockResolvedValue({
       id: 'user-1',
       telegramId: 123,
       hasUsedTrial: false,
     });
     mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1' });
+    mockPlanRepo.findByType.mockResolvedValue([trialPlan]);
+    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
 
     await expect(useCase.execute('user-1')).rejects.toThrow(SubscriptionError);
   });
@@ -109,6 +135,7 @@ describe('ActivateTrialUseCase', () => {
     mockUserRepo.findById.mockResolvedValue(mockUser);
     mockSubscriptionRepo.findActiveByUserId.mockResolvedValue(null);
     mockPlanRepo.findByType.mockResolvedValue([mockPlan]);
+    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
     mockRemnawaveService.createUser.mockResolvedValue('remnawave-user-1');
     mockRemnawaveService.getSubscriptionUrl.mockResolvedValue('https://sub.example.com/test');
     mockSubscriptionRepo.create.mockResolvedValue({
@@ -121,14 +148,19 @@ describe('ActivateTrialUseCase', () => {
       id: 'sub-1',
       subscriptionUrl: 'https://sub.example.com/test',
     });
-    mockUserRepo.update.mockResolvedValue({ ...mockUser, hasUsedTrial: true });
     mockAuditLogRepo.create.mockResolvedValue({});
 
     const result = await useCase.execute('user-1');
 
     expect(result.subscriptionId).toBe('sub-1');
     expect(result.subscriptionUrl).toBe('https://sub.example.com/test');
-    expect(mockRemnawaveService.createUser).toHaveBeenCalledWith(123, 'testuser');
-    expect(mockUserRepo.update).toHaveBeenCalledWith('user-1', { hasUsedTrial: true });
+    expect(mockRemnawaveService.createUser).toHaveBeenCalledWith(
+      123,
+      'testuser',
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ deviceLimit: mockPlan.deviceLimit }),
+    );
+    expect(mockSyncSubscriptionDevices.execute).toHaveBeenCalledWith('sub-1');
   });
 });

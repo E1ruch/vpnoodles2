@@ -3,6 +3,7 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
+import type { SyncSubscriptionDevicesUseCase } from './SyncSubscriptionDevicesUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { SubscriptionError, ValidationError } from '../../shared/errors/index.js';
 import { daysFromNow } from '../../shared/utils/index.js';
@@ -15,6 +16,7 @@ export class ActivateTrialUseCase {
     private subscriptionRepo: ISubscriptionRepository,
     private auditLogRepo: IAuditLogRepository,
     private remnawaveService: IRemnawaveService,
+    private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
   ) {}
 
   async execute(userId: string): Promise<{ subscriptionId: string; subscriptionUrl: string }> {
@@ -86,6 +88,8 @@ export class ActivateTrialUseCase {
 
     // Update subscription with URL
     await this.subscriptionRepo.update(subscription.id, { subscriptionUrl });
+
+    await this.syncSubscriptionDevices.execute(subscription.id);
 
     // НЕ отмечаем hasUsedTrial - бесплатный тариф можно продлевать
     // await this.userRepo.update(userId, { hasUsedTrial: true });

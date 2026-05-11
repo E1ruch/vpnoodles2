@@ -1,5 +1,5 @@
-import { PaymentOrchestrator } from '../../src/infrastructure/payments/PaymentOrchestrator.js';
-import { PaymentError } from '../../src/shared/errors/index.js';
+import { PaymentOrchestrator } from '../../src/infrastructure/payments/PaymentOrchestrator';
+import { PaymentError } from '../../src/shared/errors/index';
 
 // Mock repositories
 const mockPaymentRepo = {

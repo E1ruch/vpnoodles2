@@ -21,6 +21,7 @@ import { ActivateTrialUseCase } from '../application/usecases/ActivateTrialUseCa
 import { GetSubscriptionUseCase } from '../application/usecases/GetSubscriptionUseCase.js';
 import { PurchasePlanUseCase } from '../application/usecases/PurchasePlanUseCase.js';
 import { RenewSubscriptionUseCase } from '../application/usecases/RenewSubscriptionUseCase.js';
+import { SyncSubscriptionDevicesUseCase } from '../application/usecases/SyncSubscriptionDevicesUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -71,6 +72,11 @@ export function createContainer(): AppContainer {
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
 
+  const syncSubscriptionDevicesUseCase = new SyncSubscriptionDevicesUseCase(
+    subscriptionRepo,
+    remnawaveService,
+  );
+
   // Use cases
   const registerUserUseCase = new RegisterUserUseCase(userRepo, auditLogRepo);
   const activateTrialUseCase = new ActivateTrialUseCase(
@@ -79,8 +85,13 @@ export function createContainer(): AppContainer {
     subscriptionRepo,
     auditLogRepo,
     remnawaveService,
+    syncSubscriptionDevicesUseCase,
   );
-  const getSubscriptionUseCase = new GetSubscriptionUseCase(subscriptionRepo, planRepo);
+  const getSubscriptionUseCase = new GetSubscriptionUseCase(
+    subscriptionRepo,
+    planRepo,
+    syncSubscriptionDevicesUseCase,
+  );
   const purchasePlanUseCase = new PurchasePlanUseCase(
     userRepo,
     planRepo,
@@ -90,6 +101,7 @@ export function createContainer(): AppContainer {
     remnawaveService,
     paymentService,
     qrCodeService,
+    syncSubscriptionDevicesUseCase,
   );
   const renewSubscriptionUseCase = new RenewSubscriptionUseCase(
     subscriptionRepo,

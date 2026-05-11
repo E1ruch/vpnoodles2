@@ -1,6 +1,7 @@
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import type { SyncSubscriptionDevicesUseCase } from './SyncSubscriptionDevicesUseCase.js';
 
 export interface SubscriptionInfo {
   id: string;
@@ -21,6 +22,7 @@ export class GetSubscriptionUseCase {
   constructor(
     private subscriptionRepo: ISubscriptionRepository,
     private planRepo: IPlanRepository,
+    private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
   ) {}
 
   async execute(userId: string): Promise<SubscriptionInfo | null> {
@@ -47,6 +49,13 @@ export class GetSubscriptionUseCase {
       Math.ceil((subscription.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
     );
 
+    let usedDevices = subscription.usedDevices;
+    if (subscription.remnawaveUserId) {
+      await this.syncSubscriptionDevices.execute(subscription.id);
+      const refreshed = await this.subscriptionRepo.findById(subscription.id);
+      if (refreshed) usedDevices = refreshed.usedDevices;
+    }
+
     return {
       id: subscription.id,
       planId: plan.id,
@@ -56,7 +65,7 @@ export class GetSubscriptionUseCase {
       startDate: subscription.startDate,
       endDate: subscription.endDate,
       deviceLimit: subscription.deviceLimit,
-      usedDevices: subscription.usedDevices,
+      usedDevices,
       subscriptionUrl: subscription.subscriptionUrl,
       isExpired: subscription.isExpired,
       daysLeft,
