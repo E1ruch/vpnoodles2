@@ -64,14 +64,21 @@ async function bootstrap(): Promise<void> {
             if (result.status === 'completed') {
               const paymentRow = await container.paymentRepo.findByExternalId(result.externalId);
               if (paymentRow) {
-                await container.purchasePlanUseCase.execute(paymentRow.userId, paymentRow.planId, 'yookassa', {
-                  existingPaymentId: paymentRow.id,
-                  externalChargeId: result.externalId,
-                });
-                logger.info(
-                  { userId: paymentRow.userId, planId: paymentRow.planId },
-                  'Subscription activated via YooKassa webhook',
-                );
+                if (paymentRow.status !== 'pending') {
+                  logger.warn(
+                    { paymentId: paymentRow.id, status: paymentRow.status, externalId: result.externalId },
+                    'YooKassa webhook ignored for inactive payment',
+                  );
+                } else {
+                  await container.purchasePlanUseCase.execute(paymentRow.userId, paymentRow.planId, 'yookassa', {
+                    existingPaymentId: paymentRow.id,
+                    externalChargeId: result.externalId,
+                  });
+                  logger.info(
+                    { userId: paymentRow.userId, planId: paymentRow.planId },
+                    'Subscription activated via YooKassa webhook',
+                  );
+                }
               } else {
                 logger.warn({ externalId: result.externalId }, 'YooKassa webhook: payment not found in DB');
               }

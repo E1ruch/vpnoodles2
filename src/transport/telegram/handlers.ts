@@ -23,6 +23,8 @@ import {
   vpnActionsKeyboard,
   trialConfirmKeyboard,
   backToMainKeyboard,
+  pendingPaymentGateKeyboard,
+  payLinkKeyboard,
 } from './keyboards.js';
 import { YooKassaService } from '../../infrastructure/payments/YooKassaService.js';
 import { runYooKassaFulfillmentTick } from '../../infrastructure/payments/yooKassaFulfillment.js';
@@ -98,6 +100,7 @@ export class BotHandlers {
     this.bot.action(/^buy_(.+)$/, this.handleBuyPlan);
     this.bot.action(/^renew_(.+)$/, this.handleRenew);
     this.bot.action(/^pay_(stars|yookassa)_(.+)$/, this.handlePaymentMethod);
+    this.bot.action(/^cancel_payment_(.+)$/, this.handleCancelPayment);
     this.adminHandlers.register(this.bot);
 
     // Telegram payment handlers (Stars / ЮKassa через provider_token)
@@ -174,9 +177,13 @@ export class BotHandlers {
 
       const pending = await this.paymentRepo.findPendingByUserId(user.id);
       if (pending?.provider === 'yookassa') {
-        await ctx.reply(Texts.CHECK_PAYMENT_STILL_PENDING, { reply_markup: backToMainKeyboard() });
+        await ctx.reply(Texts.CHECK_PAYMENT_STILL_PENDING, {
+          reply_markup: pendingPaymentGateKeyboard(`pay_yookassa_${pending.planId}`, pending.id),
+        });
       } else if (pending?.provider === 'stars') {
-        await ctx.reply(Texts.CHECK_PAYMENT_STARS_PENDING, { reply_markup: backToMainKeyboard() });
+        await ctx.reply(Texts.CHECK_PAYMENT_STARS_PENDING, {
+          reply_markup: pendingPaymentGateKeyboard(`pay_stars_${pending.planId}`, pending.id),
+        });
       } else {
         await ctx.reply(Texts.CHECK_PAYMENT_NO_PENDING, { reply_markup: backToMainKeyboard() });
       }
@@ -394,6 +401,48 @@ export class BotHandlers {
       const user = await this.userRepo.findByTelegramId(telegramUser.id);
       if (!user || !user.id) return;
 
+      const pendingPayment = await this.paymentRepo.findPendingByUserId(user.id);
+      if (pendingPayment) {
+        const ttlMinutes = getEnv().PAYMENT_PENDING_TTL_MINUTES;
+        const expiresAtMs = pendingPayment.createdAt.getTime() + ttlMinutes * 60 * 1000;
+        const isExpired = Date.now() > expiresAtMs;
+
+        if (isExpired) {
+          await this.paymentRepo.update(pendingPayment.id, { status: 'failed' });
+        } else if (pendingPayment.planId !== planId || pendingPayment.provider !== provider) {
+          const pendingPlan = await this.planRepo.findById(pendingPayment.planId);
+          const minutesLeft = Math.max(1, Math.ceil((expiresAtMs - Date.now()) / 60000));
+          const providerLabel =
+            pendingPayment.provider === 'stars'
+              ? 'Telegram Stars'
+              : pendingPayment.provider === 'yookassa'
+                ? 'Картой'
+                : pendingPayment.provider;
+          const amountStr =
+            pendingPayment.currency === 'XTR'
+              ? `${pendingPayment.amount} ⭐`
+              : formatCurrency(pendingPayment.amount);
+          const continuePayCallbackData =
+            pendingPayment.provider === 'stars' || pendingPayment.provider === 'yookassa'
+              ? `pay_${pendingPayment.provider}_${pendingPayment.planId}`
+              : null;
+
+          await ctx.editMessageText(
+            Texts.PENDING_PAYMENT_GATE.replace('{planName}', pendingPlan?.name ?? 'Тариф')
+              .replace('{amountStr}', amountStr)
+              .replace('{providerLabel}', providerLabel)
+              .replace('{minutesLeft}', String(minutesLeft)),
+            {
+              reply_markup: pendingPaymentGateKeyboard(
+                continuePayCallbackData,
+                pendingPayment.id,
+              ),
+            },
+          );
+          return;
+        }
+      }
+
       if (provider === 'stars') {
         // Telegram Stars инвойс
         const payment = await this.paymentService.createPayment(
@@ -472,7 +521,7 @@ export class BotHandlers {
               `💳 Telegram-платежи временно недоступны, используем резервный способ.\n\n` +
                 `Оплатите по ссылке:\n${paymentUrl}\n\n` +
                 `После оплаты доступ активируется в течение минуты (проверка в ЮKassa). Можно отправить /check_payment.`,
-              { reply_markup: backToMainKeyboard() },
+              { reply_markup: payLinkKeyboard(payment.paymentId) },
             );
           } else {
             await ctx.reply('Не удалось получить ссылку на оплату.', {
@@ -483,6 +532,55 @@ export class BotHandlers {
       }
     } catch (err) {
       logger.error({ err }, 'Error processing payment method');
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleCancelPayment = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const cbData = ctx.callbackQuery;
+      if (!cbData || !('data' in cbData) || !cbData.data) return;
+
+      const paymentId = cbData.data.replace('cancel_payment_', '');
+      const [user, payment] = await Promise.all([
+        this.userRepo.findByTelegramId(telegramUser.id),
+        this.paymentRepo.findById(paymentId),
+      ]);
+
+      if (!user || !payment || payment.userId !== user.id) {
+        await ctx.reply(Texts.PAYMENT_CANCEL_NOT_FOUND, { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      if (payment.status === 'completed') {
+        await ctx.reply(Texts.PAYMENT_CANCEL_COMPLETED, { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      if (payment.status !== 'pending') {
+        await ctx.reply(Texts.PAYMENT_CANCEL_NOT_FOUND, { reply_markup: backToMainKeyboard() });
+        return;
+      }
+
+      if (payment.provider === 'yookassa' && payment.externalPaymentId && this.yooKassaService.isConfigured()) {
+        try {
+          await this.yooKassaService.cancelPayment(payment.externalPaymentId);
+        } catch (cancelErr) {
+          logger.warn(
+            { cancelErr, paymentId: payment.id, externalPaymentId: payment.externalPaymentId },
+            'Could not cancel YooKassa payment remotely; canceling local pending payment',
+          );
+        }
+      }
+
+      await this.paymentService.cancelPayment(payment.id);
+      await ctx.reply(Texts.PAYMENT_CANCELED, { reply_markup: planSelectionKeyboard() });
+    } catch (err) {
+      logger.error({ err }, 'Error canceling payment');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };
@@ -594,13 +692,49 @@ export class BotHandlers {
 
   private handlePreCheckout = async (ctx: Context): Promise<void> => {
     const logger = getLogger();
+    const updateId = ctx.update?.update_id;
+    let preCheckoutAnswered = false;
+
+    const answerPreCheckout = async (ok: boolean, errorMessage?: string): Promise<void> => {
+      const query = ctx.update && 'pre_checkout_query' in ctx.update ? ctx.update.pre_checkout_query : null;
+      const queryId = query?.id ?? 'unknown';
+      logger.info(
+        { updateId, queryId, ok, errorMessage: ok ? undefined : errorMessage },
+        'answerPreCheckoutQuery → calling Telegram API',
+      );
+      try {
+        await ctx.answerPreCheckoutQuery(ok, errorMessage);
+        preCheckoutAnswered = true;
+        logger.info({ updateId, queryId, ok }, 'answerPreCheckoutQuery ← Telegram API OK');
+      } catch (err) {
+        logger.error({ updateId, queryId, ok, err }, 'answerPreCheckoutQuery ← Telegram API FAILED');
+        throw err;
+      }
+    };
+
     try {
       const query = ctx.update && 'pre_checkout_query' in ctx.update ? ctx.update.pre_checkout_query : null;
-      if (!query) return;
+      if (!query) {
+        logger.warn({ updateId }, 'Telegram update without pre_checkout_query (cannot answerPreCheckoutQuery)');
+        return;
+      }
+
+      logger.info(
+        {
+          updateId,
+          queryId: query.id,
+          fromId: query.from.id,
+          currency: query.currency,
+          totalAmount: query.total_amount,
+          invoicePayload: query.invoice_payload,
+        },
+        'PreCheckoutQuery ← received from Telegram',
+      );
 
       const payloadParts = query.invoice_payload.split(':');
       if (payloadParts.length !== 4 || payloadParts[0] !== 'plan') {
-        await ctx.answerPreCheckoutQuery(false, 'Некорректный payload оплаты.');
+        logger.warn({ updateId, queryId: query.id }, 'PreCheckout rejected: invalid_payload');
+        await answerPreCheckout(false, 'Некорректный payload оплаты.');
         return;
       }
 
@@ -608,7 +742,11 @@ export class BotHandlers {
       const planId = payloadParts[2];
       const paymentId = payloadParts[3];
       if (!planId || !paymentId || (provider !== 'stars' && provider !== 'yookassa')) {
-        await ctx.answerPreCheckoutQuery(false, 'Некорректные данные оплаты.');
+        logger.warn(
+          { updateId, queryId: query.id, planId, paymentId, provider },
+          'PreCheckout rejected: bad_provider_or_ids',
+        );
+        await answerPreCheckout(false, 'Некорректные данные оплаты.');
         return;
       }
 
@@ -619,7 +757,8 @@ export class BotHandlers {
       ]);
 
       if (!plan || !payment || !user) {
-        await ctx.answerPreCheckoutQuery(false, 'Платеж не найден или недоступен.');
+        logger.warn({ updateId, queryId: query.id, planId, paymentId }, 'PreCheckout rejected: not_found');
+        await answerPreCheckout(false, 'Платеж не найден или недоступен.');
         return;
       }
 
@@ -627,7 +766,16 @@ export class BotHandlers {
       const expectedAmount =
         provider === 'stars' ? plan.priceStars : Math.round(plan.priceRub * 100);
       if (query.currency !== expectedCurrency || query.total_amount !== expectedAmount) {
-        await ctx.answerPreCheckoutQuery(false, 'Неверная сумма или валюта платежа.');
+        logger.warn(
+          {
+            updateId,
+            queryId: query.id,
+            got: { currency: query.currency, totalAmount: query.total_amount },
+            expected: { currency: expectedCurrency, totalAmount: expectedAmount },
+          },
+          'PreCheckout rejected: amount_currency_mismatch',
+        );
+        await answerPreCheckout(false, 'Неверная сумма или валюта платежа.');
         return;
       }
 
@@ -637,14 +785,38 @@ export class BotHandlers {
         payment.provider !== provider ||
         payment.status !== 'pending'
       ) {
-        await ctx.answerPreCheckoutQuery(false, 'Платеж не прошел валидацию.');
+        logger.warn(
+          {
+            updateId,
+            queryId: query.id,
+            paymentUserId: payment.userId,
+            userId: user.id,
+            paymentPlanId: payment.planId,
+            planId: plan.id,
+            paymentProvider: payment.provider,
+            provider,
+            paymentStatus: payment.status,
+          },
+          'PreCheckout rejected: validation_failed',
+        );
+        await answerPreCheckout(false, 'Платеж не прошел валидацию.');
         return;
       }
 
-      await ctx.answerPreCheckoutQuery(true);
+      logger.info(
+        { updateId, queryId: query.id, paymentId, planId, provider },
+        'PreCheckoutQuery validation OK → approving',
+      );
+      await answerPreCheckout(true);
     } catch (err) {
-      logger.error({ err }, 'Error in pre_checkout');
-      await ctx.answerPreCheckoutQuery(false, 'Ошибка обработки платежа');
+      logger.error({ updateId, err }, 'Error in pre_checkout handler');
+      if (!preCheckoutAnswered) {
+        try {
+          await answerPreCheckout(false, 'Ошибка обработки платежа');
+        } catch (answerErr) {
+          logger.error({ updateId, err: answerErr }, 'Could not answerPreCheckoutQuery after handler error');
+        }
+      }
     }
   };
 

@@ -72,8 +72,6 @@ export function vpnActionsKeyboard(
 
   if (isExpired || showRenewButton) {
     buttons.push([{ text: '🔄 Продлить', callback_data: `renew_${subscriptionId}` }]);
-  } else {
-    buttons.push([{ text: '🔗 Получить ссылку', callback_data: `get_link_${subscriptionId}` }]);
   }
 
   buttons.push([{ text: '📖 Инструкция', callback_data: 'instructions' }]);
@@ -87,6 +85,28 @@ export function trialConfirmKeyboard(): InlineKeyboardMarkup {
     inline_keyboard: [
       [{ text: '✅ Активировать бесплатный тариф', callback_data: 'activate_trial' }],
       [{ text: 'Назад', callback_data: 'plans' }],
+    ],
+  };
+}
+
+export function pendingPaymentGateKeyboard(
+  continuePayCallbackData: string | null,
+  paymentId: string,
+): InlineKeyboardMarkup {
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
+  if (continuePayCallbackData) {
+    rows.push([{ text: '💳 Продолжить оплату', callback_data: continuePayCallbackData }]);
+  }
+  rows.push([{ text: '❌ Отменить платёж', callback_data: `cancel_payment_${paymentId}` }]);
+  rows.push([{ text: 'В главное меню', callback_data: 'back_main' }]);
+  return { inline_keyboard: rows };
+}
+
+export function payLinkKeyboard(paymentId: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '❌ Отменить платёж', callback_data: `cancel_payment_${paymentId}` }],
+      [{ text: 'В главное меню', callback_data: 'back_main' }],
     ],
   };
 }

@@ -93,6 +93,9 @@ export class PurchasePlanUseCase {
         logger.info({ paymentId: fulfillmentPaymentId }, 'Payment already fulfilled');
         return await this.buildPurchaseResultFromActiveSubscription(userId, planId);
       }
+      if (existingPaymentRecord.status !== 'pending') {
+        throw new ValidationError('Payment is no longer active');
+      }
     }
 
     let paymentResult: { paymentId: string };

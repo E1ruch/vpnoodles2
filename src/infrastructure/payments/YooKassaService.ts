@@ -184,6 +184,34 @@ export class YooKassaService {
     }
   }
 
+  async cancelPayment(yooKassaPaymentId: string): Promise<void> {
+    const logger = getLogger();
+
+    if (!this.isConfigured()) {
+      throw new PaymentError('YooKassa is not configured');
+    }
+
+    const response = await fetch(`https://api.yookassa.ru/v3/payments/${yooKassaPaymentId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotence-Key': generateId(),
+        Authorization: `Basic ${Buffer.from(`${this.shopId}:${this.secretKey}`).toString('base64')}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.warn(
+        { paymentId: yooKassaPaymentId, status: response.status, error: errorText },
+        'YooKassa cancel payment failed',
+      );
+      throw new PaymentError(`YooKassa cancel payment error: ${response.status}`);
+    }
+
+    logger.info({ paymentId: yooKassaPaymentId }, 'YooKassa payment canceled');
+  }
+
   async verifyPayment(paymentId: string): Promise<{ status: string; externalId?: string }> {
     const logger = getLogger();
 
