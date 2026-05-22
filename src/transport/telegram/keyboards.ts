@@ -116,3 +116,39 @@ export function backToMainKeyboard(): InlineKeyboardMarkup {
     inline_keyboard: [[{ text: 'В главное меню', callback_data: 'back_main' }]],
   };
 }
+
+export function profileKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '📱 Устройства', callback_data: 'devices' }],
+      [{ text: 'Назад', callback_data: 'back_main' }],
+    ],
+  };
+}
+
+export function devicesKeyboard(
+  deviceCount: number,
+  showDeleteButtons: boolean,
+): InlineKeyboardMarkup {
+  const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
+
+  if (showDeleteButtons && deviceCount > 0) {
+    for (let i = 0; i < deviceCount; i++) {
+      buttons.push([{ text: `🗑 Удалить устройство ${i + 1}`, callback_data: `del_dev_${i}` }]);
+    }
+  }
+
+  buttons.push([{ text: 'Назад в профиль', callback_data: 'profile' }]);
+  buttons.push([{ text: 'В главное меню', callback_data: 'back_main' }]);
+
+  return { inline_keyboard: buttons };
+}
+
+export function deleteDeviceConfirmKeyboard(deviceIndex: number): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '✅ Да, удалить', callback_data: `confirm_del_dev_${deviceIndex}` }],
+      [{ text: 'Отмена', callback_data: 'devices' }],
+    ],
+  };
+}

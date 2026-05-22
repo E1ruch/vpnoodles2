@@ -28,3 +28,19 @@ export interface PlanDuration {
   days: number;
   label: string;
 }
+
+export interface HwidDevice {
+  hwid: string;
+  userUuid: string;
+  platform: string | null;
+  osVersion: string | null;
+  deviceModel: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HwidDevicesResult {
+  total: number;
+  devices: HwidDevice[];
+}

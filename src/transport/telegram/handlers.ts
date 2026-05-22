@@ -4,6 +4,9 @@ import type { ActivateTrialUseCase } from '../../application/usecases/ActivateTr
 import type { GetSubscriptionUseCase } from '../../application/usecases/GetSubscriptionUseCase.js';
 import type { PurchasePlanUseCase } from '../../application/usecases/PurchasePlanUseCase.js';
 import type { RenewSubscriptionUseCase } from '../../application/usecases/RenewSubscriptionUseCase.js';
+import type { GetUserDevicesUseCase } from '../../application/usecases/GetUserDevicesUseCase.js';
+import type { DeleteUserDeviceUseCase } from '../../application/usecases/DeleteUserDeviceUseCase.js';
+import type { HwidDevice } from '../../shared/types/index.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
@@ -12,7 +15,7 @@ import type { IAuditLogRepository } from '../../domain/interfaces/repositories.j
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import type { IPaymentService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { isAppError } from '../../shared/errors/index.js';
+import { isAppError, NotFoundError } from '../../shared/errors/index.js';
 import { formatDate, formatCurrency } from '../../shared/utils/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import { Texts } from './texts.js';
@@ -25,6 +28,9 @@ import {
   backToMainKeyboard,
   pendingPaymentGateKeyboard,
   payLinkKeyboard,
+  profileKeyboard,
+  devicesKeyboard,
+  deleteDeviceConfirmKeyboard,
 } from './keyboards.js';
 import { YooKassaService } from '../../infrastructure/payments/YooKassaService.js';
 import { runYooKassaFulfillmentTick } from '../../infrastructure/payments/yooKassaFulfillment.js';
@@ -37,6 +43,8 @@ export class BotHandlers {
   private getSubscription: GetSubscriptionUseCase;
   private purchasePlan: PurchasePlanUseCase;
   private renewSubscription: RenewSubscriptionUseCase;
+  private getUserDevices: GetUserDevicesUseCase;
+  private deleteUserDevice: DeleteUserDeviceUseCase;
   private userRepo: IUserRepository;
   private planRepo: IPlanRepository;
   private subscriptionRepo: ISubscriptionRepository;
@@ -54,6 +62,8 @@ export class BotHandlers {
     getSubscription: GetSubscriptionUseCase,
     purchasePlan: PurchasePlanUseCase,
     renewSubscription: RenewSubscriptionUseCase,
+    getUserDevices: GetUserDevicesUseCase,
+    deleteUserDevice: DeleteUserDeviceUseCase,
     userRepo: IUserRepository,
     planRepo: IPlanRepository,
     subscriptionRepo: ISubscriptionRepository,
@@ -68,6 +78,8 @@ export class BotHandlers {
     this.getSubscription = getSubscription;
     this.purchasePlan = purchasePlan;
     this.renewSubscription = renewSubscription;
+    this.getUserDevices = getUserDevices;
+    this.deleteUserDevice = deleteUserDevice;
     this.userRepo = userRepo;
     this.planRepo = planRepo;
     this.subscriptionRepo = subscriptionRepo;
@@ -96,6 +108,9 @@ export class BotHandlers {
     this.bot.action('activate_trial', this.handleActivateTrial);
     this.bot.action('instructions', this.handleInstructions);
     this.bot.action('profile', this.handleProfile);
+    this.bot.action('devices', this.handleDevices);
+    this.bot.action(/^del_dev_(\d+)$/, this.handleDeleteDevicePrompt);
+    this.bot.action(/^confirm_del_dev_(\d+)$/, this.handleDeleteDevice);
     this.bot.action('support', this.handleSupport);
     this.bot.action(/^buy_(.+)$/, this.handleBuyPlan);
     this.bot.action(/^renew_(.+)$/, this.handleRenew);
@@ -620,17 +635,225 @@ export class BotHandlers {
 
       const sub = await this.getSubscription.execute(user.id);
       const status = sub ? (sub.isExpired ? 'Не активно' : 'Активно') : 'Нет подписки';
+      const devicesLine = sub
+        ? Texts.PROFILE_DEVICES_LINE.replace('{usedDevices}', String(sub.usedDevices)).replace(
+            '{deviceLimit}',
+            String(sub.deviceLimit),
+          )
+        : '';
 
       const text = Texts.PROFILE.replace('{telegramId}', String(user.telegramId))
         .replace('{firstName}', user.firstName ?? 'Не указано')
         .replace('{status}', status)
-        .replace('{regDate}', formatDate(user.createdAt));
+        .replace('{regDate}', formatDate(user.createdAt))
+        .replace('{devicesLine}', devicesLine);
 
-      await ctx.editMessageText(text, { reply_markup: backToMainKeyboard(), parse_mode: 'Markdown' });
+      await ctx.editMessageText(text, {
+        reply_markup: profileKeyboard(),
+        parse_mode: 'Markdown',
+      });
     } catch {
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };
+
+  private handleDevices = async (ctx: Context): Promise<void> => {
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const devicesInfo = await this.getUserDevices.execute(user.id);
+      if (!devicesInfo) {
+        await ctx.editMessageText(Texts.DEVICES_NO_SUBSCRIPTION, {
+          reply_markup: profileKeyboard(),
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      const { total, devices, deviceLimit } = devicesInfo;
+
+      if (total === 0 || devices.length === 0) {
+        const text = Texts.DEVICES_EMPTY.replace('{deviceLimit}', String(deviceLimit));
+        await ctx.editMessageText(text, {
+          reply_markup: devicesKeyboard(0, false),
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      const devicesList = devices.map((device, index) => this.formatDeviceListItem(device, index)).join('\n\n');
+      const text = Texts.DEVICES_LIST.replace('{total}', String(total))
+        .replace('{deviceLimit}', String(deviceLimit))
+        .replace('{devicesList}', devicesList);
+
+      await ctx.editMessageText(text, {
+        reply_markup: devicesKeyboard(devices.length, true),
+        parse_mode: 'Markdown',
+      });
+    } catch {
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleDeleteDevicePrompt = async (ctx: Context): Promise<void> => {
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const cbData = ctx.callbackQuery;
+      if (!cbData || !('data' in cbData) || !cbData.data) return;
+
+      const match = cbData.data.match(/^del_dev_(\d+)$/);
+      if (!match?.[1]) return;
+
+      const deviceIndex = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(deviceIndex) || deviceIndex < 0) return;
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const devicesInfo = await this.getUserDevices.execute(user.id);
+      if (!devicesInfo) {
+        await ctx.reply(Texts.DEVICES_NO_SUBSCRIPTION, { reply_markup: profileKeyboard() });
+        return;
+      }
+
+      const device = devicesInfo.devices[deviceIndex];
+      if (!device) {
+        await ctx.reply(Texts.DEVICE_DELETE_NOT_FOUND, { reply_markup: devicesKeyboard(0, false) });
+        return;
+      }
+
+      const text = Texts.DEVICE_DELETE_CONFIRM.replace(
+        '{deviceInfo}',
+        this.formatDeviceDetail(device, deviceIndex),
+      );
+
+      await ctx.editMessageText(text, {
+        reply_markup: deleteDeviceConfirmKeyboard(deviceIndex),
+        parse_mode: 'Markdown',
+      });
+    } catch {
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleDeleteDevice = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const cbData = ctx.callbackQuery;
+      if (!cbData || !('data' in cbData) || !cbData.data) return;
+
+      const match = cbData.data.match(/^confirm_del_dev_(\d+)$/);
+      if (!match?.[1]) return;
+
+      const deviceIndex = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(deviceIndex) || deviceIndex < 0) return;
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const devicesInfo = await this.getUserDevices.execute(user.id);
+      if (!devicesInfo) {
+        await ctx.reply(Texts.DEVICES_NO_SUBSCRIPTION, { reply_markup: profileKeyboard() });
+        return;
+      }
+
+      const device = devicesInfo.devices[deviceIndex];
+      if (!device) {
+        await ctx.editMessageText(Texts.DEVICE_DELETE_NOT_FOUND, {
+          reply_markup: devicesKeyboard(0, false),
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      await this.deleteUserDevice.execute(user.id, device.hwid);
+
+      const refreshed = await this.getUserDevices.execute(user.id);
+      const total = refreshed?.total ?? 0;
+      const deviceLimit = refreshed?.deviceLimit ?? devicesInfo.deviceLimit;
+
+      if (total === 0 || !refreshed?.devices.length) {
+        const text = Texts.DEVICE_DELETED.replace('{total}', '0').replace(
+          '{deviceLimit}',
+          String(deviceLimit),
+        );
+        await ctx.editMessageText(`${text}\n\n${Texts.DEVICES_EMPTY.replace('{deviceLimit}', String(deviceLimit))}`, {
+          reply_markup: devicesKeyboard(0, false),
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      const devicesList = refreshed.devices
+        .map((d, index) => this.formatDeviceListItem(d, index))
+        .join('\n\n');
+      const text =
+        Texts.DEVICE_DELETED.replace('{total}', String(total)).replace(
+          '{deviceLimit}',
+          String(deviceLimit),
+        ) +
+        '\n\n' +
+        Texts.DEVICES_LIST.replace('{total}', String(total))
+          .replace('{deviceLimit}', String(deviceLimit))
+          .replace('{devicesList}', devicesList);
+
+      await ctx.editMessageText(text, {
+        reply_markup: devicesKeyboard(refreshed.devices.length, true),
+        parse_mode: 'Markdown',
+      });
+    } catch (err) {
+      logger.error({ err }, 'Error deleting device');
+      if (err instanceof NotFoundError) {
+        await ctx.reply(Texts.DEVICE_DELETE_NOT_FOUND, { reply_markup: devicesKeyboard(0, false) });
+        return;
+      }
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private formatDeviceListItem(device: HwidDevice, index: number): string {
+    const title = this.formatDeviceTitle(device, index);
+    const details = this.formatDeviceMeta(device);
+    return `${title}\n${details}`;
+  }
+
+  private formatDeviceDetail(device: HwidDevice, index: number): string {
+    const title = this.formatDeviceTitle(device, index);
+    const details = this.formatDeviceMeta(device);
+    const hwid = this.formatHwidShort(device.hwid);
+    return `${title}\n${details}\n🔑 ID: \`${hwid}\``;
+  }
+
+  private formatDeviceTitle(device: HwidDevice, index: number): string {
+    const model = device.deviceModel?.trim();
+    const platform = device.platform?.trim();
+    if (model) return `**${index + 1}. ${model}**`;
+    if (platform) return `**${index + 1}. ${platform}**`;
+    return `**${index + 1}. Устройство**`;
+  }
+
+  private formatDeviceMeta(device: HwidDevice): string {
+    const parts: string[] = [];
+    if (device.platform) parts.push(`🖥 Платформа: ${device.platform}`);
+    if (device.osVersion) parts.push(`📦 ОС: ${device.osVersion}`);
+    if (device.createdAt) parts.push(`📅 Подключено: ${formatDate(new Date(device.createdAt))}`);
+    if (parts.length === 0) parts.push('ℹ️ Дополнительные данные недоступны');
+    return parts.join('\n');
+  }
+
+  private formatHwidShort(hwid: string): string {
+    if (hwid.length <= 16) return hwid;
+    return `${hwid.slice(0, 8)}…${hwid.slice(-4)}`;
+  }
 
   private handleSupport = async (ctx: Context): Promise<void> => {
     const env = getEnv();

@@ -1,4 +1,9 @@
-import type { VpnCredentials, PaymentResult, PaymentProvider } from '../../shared/types/index.js';
+import type {
+  VpnCredentials,
+  PaymentResult,
+  PaymentProvider,
+  HwidDevicesResult,
+} from '../../shared/types/index.js';
 
 export interface IRemnawaveService {
   findUserByUsername(username: string): Promise<string | null>;
@@ -33,6 +38,10 @@ export interface IRemnawaveService {
   ): Promise<void>;
   /** GET /api/hwid/devices/{userUuid} → response.total (количество устройств). */
   getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number>;
+  /** GET /api/hwid/devices/{userUuid} → список устройств. */
+  getHwidDevices(remnawaveUserUuid: string): Promise<HwidDevicesResult>;
+  /** POST /api/hwid/devices/delete — удаление устройства по hwid. */
+  deleteHwidDevice(remnawaveUserUuid: string, hwid: string): Promise<HwidDevicesResult>;
 }
 
 export interface IPaymentService {

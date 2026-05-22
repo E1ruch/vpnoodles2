@@ -1,4 +1,5 @@
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
+import type { HwidDevice, HwidDevicesResult } from '../../shared/types/index.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { RemnawaveError } from '../../shared/errors/index.js';
 import { getEnv } from '../../shared/config/env.js';
@@ -380,26 +381,46 @@ export class RemnawaveClient implements IRemnawaveService {
   }
 
   async getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number> {
+    const { total } = await this.getHwidDevices(remnawaveUserUuid);
+    return total;
+  }
+
+  async getHwidDevices(remnawaveUserUuid: string): Promise<HwidDevicesResult> {
     const logger = getLogger();
-    interface HwidDevicesPayload {
-      total: number;
-      devices?: unknown[];
-    }
 
     try {
-      const raw = await this.request<RemnawaveApiResponse<HwidDevicesPayload>>(
+      const raw = await this.request<RemnawaveApiResponse<HwidDevicesResult>>(
         'GET',
         `/api/hwid/devices/${encodeURIComponent(remnawaveUserUuid)}`,
       );
-      const total = raw.response?.total;
-      return typeof total === 'number' && Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+      return this.normalizeHwidDevicesResponse(raw.response);
     } catch (error) {
       if (error instanceof RemnawaveError && error.message.includes('404')) {
-        logger.info({ remnawaveUserUuid }, 'Remnawave HWID total: 404 → 0');
-        return 0;
+        logger.info({ remnawaveUserUuid }, 'Remnawave HWID devices: 404 → empty');
+        return { total: 0, devices: [] };
       }
       throw error;
     }
+  }
+
+  async deleteHwidDevice(remnawaveUserUuid: string, hwid: string): Promise<HwidDevicesResult> {
+    const raw = await this.request<RemnawaveApiResponse<HwidDevicesResult>>(
+      'POST',
+      '/api/hwid/devices/delete',
+      { userUuid: remnawaveUserUuid, hwid },
+    );
+    return this.normalizeHwidDevicesResponse(raw.response);
+  }
+
+  private normalizeHwidDevicesResponse(payload: HwidDevicesResult | undefined): HwidDevicesResult {
+    const devices = Array.isArray(payload?.devices)
+      ? payload.devices.filter((d): d is HwidDevice => typeof d?.hwid === 'string')
+      : [];
+    const total =
+      typeof payload?.total === 'number' && Number.isFinite(payload.total)
+        ? Math.max(0, Math.floor(payload.total))
+        : devices.length;
+    return { total, devices };
   }
 
   private async getUser(remnawaveUserId: string): Promise<RemnawaveUser> {
