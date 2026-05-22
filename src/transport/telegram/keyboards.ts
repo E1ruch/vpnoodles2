@@ -63,6 +63,31 @@ export function adminBackKeyboard(): InlineKeyboardMarkup {
   };
 }
 
+export type AdminListSection = 'users' | 'logs' | 'subs';
+
+export function adminPaginatedKeyboard(
+  section: AdminListSection,
+  page: number,
+  totalPages: number,
+): InlineKeyboardMarkup {
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
+  const prefix = `admin_${section}`;
+
+  if (totalPages > 1) {
+    const navRow: Array<{ text: string; callback_data: string }> = [];
+    if (page > 0) {
+      navRow.push({ text: '◀️ Назад', callback_data: `${prefix}_p${page - 1}` });
+    }
+    if (page < totalPages - 1) {
+      navRow.push({ text: 'Вперёд ▶️', callback_data: `${prefix}_p${page + 1}` });
+    }
+    if (navRow.length > 0) rows.push(navRow);
+  }
+
+  rows.push([{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }]);
+  return { inline_keyboard: rows };
+}
+
 export function vpnActionsKeyboard(
   subscriptionId: string,
   isExpired: boolean,

@@ -53,7 +53,11 @@ export interface IPaymentRepository {
 export interface IAuditLogRepository {
   create(log: Partial<AuditLog>): Promise<AuditLog>;
   findByUserId(userId: string, limit: number): Promise<AuditLog[]>;
-  findAll(options?: { limit?: number; order?: { [key: string]: 'ASC' | 'DESC' } }): Promise<AuditLog[]>;
+  findAll(options?: {
+    limit?: number;
+    skip?: number;
+    order?: { [key: string]: 'ASC' | 'DESC' };
+  }): Promise<AuditLog[]>;
   count(): Promise<number>;
 }
 
