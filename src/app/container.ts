@@ -22,6 +22,7 @@ import { GetSubscriptionUseCase } from '../application/usecases/GetSubscriptionU
 import { PurchasePlanUseCase } from '../application/usecases/PurchasePlanUseCase.js';
 import { RenewSubscriptionUseCase } from '../application/usecases/RenewSubscriptionUseCase.js';
 import { SyncSubscriptionDevicesUseCase } from '../application/usecases/SyncSubscriptionDevicesUseCase.js';
+import { SyncSubscriptionExpiryUseCase } from '../application/usecases/SyncSubscriptionExpiryUseCase.js';
 import { GetUserDevicesUseCase } from '../application/usecases/GetUserDevicesUseCase.js';
 import { DeleteUserDeviceUseCase } from '../application/usecases/DeleteUserDeviceUseCase.js';
 
@@ -78,6 +79,10 @@ export function createContainer(): AppContainer {
     subscriptionRepo,
     remnawaveService,
   );
+  const syncSubscriptionExpiryUseCase = new SyncSubscriptionExpiryUseCase(
+    subscriptionRepo,
+    remnawaveService,
+  );
 
   // Use cases
   const registerUserUseCase = new RegisterUserUseCase(userRepo, auditLogRepo);
@@ -93,6 +98,7 @@ export function createContainer(): AppContainer {
     subscriptionRepo,
     planRepo,
     syncSubscriptionDevicesUseCase,
+    syncSubscriptionExpiryUseCase,
   );
   const purchasePlanUseCase = new PurchasePlanUseCase(
     userRepo,
@@ -110,6 +116,7 @@ export function createContainer(): AppContainer {
     planRepo,
     auditLogRepo,
     remnawaveService,
+    syncSubscriptionExpiryUseCase,
   );
   const getUserDevicesUseCase = new GetUserDevicesUseCase(subscriptionRepo, remnawaveService);
   const deleteUserDeviceUseCase = new DeleteUserDeviceUseCase(

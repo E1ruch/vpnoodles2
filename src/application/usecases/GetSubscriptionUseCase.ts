@@ -2,6 +2,7 @@ import type { ISubscriptionRepository } from '../../domain/interfaces/repositori
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import type { SyncSubscriptionDevicesUseCase } from './SyncSubscriptionDevicesUseCase.js';
+import type { SyncSubscriptionExpiryUseCase } from './SyncSubscriptionExpiryUseCase.js';
 
 export interface SubscriptionInfo {
   id: string;
@@ -23,6 +24,7 @@ export class GetSubscriptionUseCase {
     private subscriptionRepo: ISubscriptionRepository,
     private planRepo: IPlanRepository,
     private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
+    private syncSubscriptionExpiry: SyncSubscriptionExpiryUseCase,
   ) {}
 
   async execute(userId: string): Promise<SubscriptionInfo | null> {
@@ -35,8 +37,20 @@ export class GetSubscriptionUseCase {
     }
 
     const now = new Date();
+
+    if (subscription.remnawaveUserId) {
+      await Promise.all([
+        this.syncSubscriptionExpiry.execute(subscription.id),
+        this.syncSubscriptionDevices.execute(subscription.id),
+      ]);
+      const refreshed = await this.subscriptionRepo.findById(subscription.id);
+      if (refreshed) subscription = refreshed;
+    }
+
     if (subscription.status === 'active' && subscription.endDate <= now) {
       subscription = await this.subscriptionRepo.update(subscription.id, { status: 'expired' });
+    } else if (subscription.status === 'expired' && subscription.endDate > now) {
+      subscription = await this.subscriptionRepo.update(subscription.id, { status: 'active' });
     }
 
     const plan = await this.planRepo.findById(subscription.planId);
@@ -49,13 +63,6 @@ export class GetSubscriptionUseCase {
       Math.ceil((subscription.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
     );
 
-    let usedDevices = subscription.usedDevices;
-    if (subscription.remnawaveUserId) {
-      await this.syncSubscriptionDevices.execute(subscription.id);
-      const refreshed = await this.subscriptionRepo.findById(subscription.id);
-      if (refreshed) usedDevices = refreshed.usedDevices;
-    }
-
     return {
       id: subscription.id,
       planId: plan.id,
@@ -65,7 +72,7 @@ export class GetSubscriptionUseCase {
       startDate: subscription.startDate,
       endDate: subscription.endDate,
       deviceLimit: subscription.deviceLimit,
-      usedDevices,
+      usedDevices: subscription.usedDevices,
       subscriptionUrl: subscription.subscriptionUrl,
       isExpired: subscription.isExpired,
       daysLeft,

@@ -380,6 +380,26 @@ export class RemnawaveClient implements IRemnawaveService {
     });
   }
 
+  async getUserExpireAt(remnawaveUserUuid: string): Promise<Date | null> {
+    const logger = getLogger();
+
+    try {
+      const user = await this.getUser(remnawaveUserUuid);
+      const expireAt = new Date(user.expireAt);
+      if (Number.isNaN(expireAt.getTime())) {
+        logger.warn({ remnawaveUserUuid, expireAt: user.expireAt }, 'Invalid expireAt from Remnawave');
+        return null;
+      }
+      return expireAt;
+    } catch (error) {
+      if (error instanceof RemnawaveError && error.message.includes('404')) {
+        logger.info({ remnawaveUserUuid }, 'Remnawave user expireAt: 404 → skip sync');
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number> {
     const { total } = await this.getHwidDevices(remnawaveUserUuid);
     return total;
