@@ -5,6 +5,7 @@ import type { IPaymentRepository } from '../../domain/interfaces/repositories.js
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
+import { SubscriptionError } from '../../shared/errors/index.js';
 import { YooKassaService } from './YooKassaService.js';
 import { Texts } from '../../transport/telegram/texts.js';
 import { backToMainKeyboard } from '../../transport/telegram/keyboards.js';
@@ -106,6 +107,20 @@ export async function runYooKassaFulfillmentTick(
         logger.debug({ paymentId: p.id, yooId }, 'YooKassa waiting_for_capture, skip');
       }
     } catch (err) {
+      if (
+        err instanceof SubscriptionError &&
+        err.message === 'User already has active paid subscription'
+      ) {
+        await deps.paymentRepo.update(p.id, {
+          status: 'completed',
+          completedAt: new Date(),
+        });
+        logger.info(
+          { paymentId: p.id, userId: p.userId },
+          'YooKassa payment already covered by active paid subscription, marked as completed',
+        );
+        continue;
+      }
       logger.warn({ err, paymentId: p.id }, 'YooKassa fulfillment row failed');
     }
   }
