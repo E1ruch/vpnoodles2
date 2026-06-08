@@ -893,11 +893,25 @@ export class BotHandlers {
 
       if (plan.type === 'trial') {
         const env = getEnv();
-        const result = await this.renewSubscription.execute(subscription.id, env.TRIAL_DURATION_DAYS);
-        await ctx.editMessageText(
-          `✅ Бесплатная подписка продлена до ${formatDate(result.endDate)}.`,
-          { reply_markup: backToMainKeyboard() },
-        );
+        await this.renewSubscription.execute(subscription.id, env.TRIAL_DURATION_DAYS);
+
+        const sub = await this.getSubscription.execute(user.id);
+        if (!sub) {
+          await ctx.editMessageText(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+          return;
+        }
+
+        const text = Texts.VPN_ACTIVE.replace('{planName}', sub.planName)
+          .replace('{endDate}', formatDate(sub.endDate))
+          .replace('{usedDevices}', String(sub.usedDevices))
+          .replace('{deviceLimit}', String(sub.deviceLimit))
+          .replace('{daysLeft}', String(sub.daysLeft))
+          .replace('{url}', sub.subscriptionUrl || 'Ссылка недоступна');
+
+        const showRenewButton = sub.planType === 'trial' && sub.daysLeft <= 3;
+        await ctx.editMessageText(text, {
+          reply_markup: vpnActionsKeyboard(sub.id, sub.isExpired, showRenewButton),
+        });
         return;
       }
 

@@ -70,6 +70,21 @@ export class PurchasePlanUseCase {
       }
     }
 
+    if (!existingRemnawaveUserId) {
+      const allSubscriptions = await this.subscriptionRepo.findByUserId(userId);
+      const previousWithRemnawave = allSubscriptions
+        .filter((sub) => sub.remnawaveUserId)
+        .sort((a, b) => b.endDate.getTime() - a.endDate.getTime())[0];
+
+      if (previousWithRemnawave?.remnawaveUserId) {
+        logger.info(
+          { userId, previousSubId: previousWithRemnawave.id },
+          'Reusing Remnawave user from expired subscription for renewal',
+        );
+        existingRemnawaveUserId = previousWithRemnawave.remnawaveUserId;
+      }
+    }
+
     // Determine amount based on provider
     const amount = provider === 'stars' ? plan.priceStars : plan.priceRub;
     const currency = provider === 'stars' ? 'XTR' : 'RUB';
