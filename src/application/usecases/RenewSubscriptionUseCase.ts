@@ -34,17 +34,12 @@ export class RenewSubscriptionUseCase {
     const estimatedEndDate = new Date(currentEnd);
     estimatedEndDate.setDate(estimatedEndDate.getDate() + additionalDays);
 
-    await this.subscriptionRepo.update(subscriptionId, {
-      status: 'active',
-      endDate: estimatedEndDate,
-    });
-
-    // Extend in Remnawave and update tag
+    // Сначала продлеваем в Remnawave, чтобы синхронизация не откатила дату в БД
     if (subscription.remnawaveUserId) {
       try {
         await this.remnawaveService.resumeUser(subscription.remnawaveUserId);
         await this.remnawaveService.extendUser(subscription.remnawaveUserId, additionalDays);
-        const newTag = plan.remnawaveTag ?? 'PAID';
+        const newTag = plan.remnawaveTag ?? (plan.type === 'trial' ? 'TRIAL' : 'PAID');
         await this.remnawaveService.updateUserTag(subscription.remnawaveUserId, newTag);
       } catch (error) {
         const isMissingUserError =
@@ -58,7 +53,14 @@ export class RenewSubscriptionUseCase {
           `Remnawave user is missing for subscription ${subscriptionId}. Manual resync required.`,
         );
       }
+    }
 
+    await this.subscriptionRepo.update(subscriptionId, {
+      status: 'active',
+      endDate: estimatedEndDate,
+    });
+
+    if (subscription.remnawaveUserId) {
       await this.syncSubscriptionExpiry.execute(subscriptionId);
     }
 
