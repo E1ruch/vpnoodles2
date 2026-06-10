@@ -140,33 +140,34 @@ export class PurchasePlanUseCase {
     const tag = plan.remnawaveTag ?? 'PAID';
     const activeInternalSquads = env.REMNAWAVE_DEFAULT_SQUAD ? [env.REMNAWAVE_DEFAULT_SQUAD] : [];
 
+    const expireAt = daysFromNow(plan.durationDays);
+    const paidRemnawaveOptions = {
+      tag,
+      deviceLimit: plan.deviceLimit,
+      trafficLimitBytes: 0,
+      trafficLimitStrategy: 'NO_RESET' as const,
+      expireAt,
+    };
+
     let remnawaveUserId: string;
 
     if (existingRemnawaveUserId) {
-      // Апгрейд существующего пользователя
-      await this.remnawaveService.upgradeUser(existingRemnawaveUserId, {
-        tag,
-        deviceLimit: plan.deviceLimit,
-        trafficLimitBytes: 0, // Безлимит для платных
-        trafficLimitStrategy: 'NO_RESET',
-        expireAt: daysFromNow(plan.durationDays),
-      });
+      await this.remnawaveService.upgradeUser(existingRemnawaveUserId, paidRemnawaveOptions);
       remnawaveUserId = existingRemnawaveUserId;
     } else {
-      // Создаём нового пользователя
       remnawaveUserId = await this.remnawaveService.createUser(
         user.telegramId,
         user.username ?? `user_${user.telegramId}`,
         tag,
         activeInternalSquads,
-        {
-          deviceLimit: plan.deviceLimit,
-        },
+        paidRemnawaveOptions,
       );
+      // createUser может вернуть уже существующего пользователя в Remnawave без обновления срока
+      await this.remnawaveService.upgradeUser(remnawaveUserId, paidRemnawaveOptions);
     }
 
     const startDate = new Date();
-    const endDate = daysFromNow(plan.durationDays);
+    const endDate = expireAt;
 
     const subscription = await this.subscriptionRepo.create({
       userId,
