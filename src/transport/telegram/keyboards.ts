@@ -51,7 +51,10 @@ export function adminKeyboard(): InlineKeyboardMarkup {
         { text: '📋 Логи', callback_data: 'admin_logs' },
         { text: '💳 Подписки', callback_data: 'admin_subscriptions' },
       ],
-      [{ text: '💰 Платежи', callback_data: 'admin_payments' }],
+      [
+        { text: '💰 Платежи', callback_data: 'admin_payments' },
+        { text: '🖥 Сервера', callback_data: 'admin_servers' },
+      ],
       [{ text: 'Назад', callback_data: 'back_main' }],
     ],
   };

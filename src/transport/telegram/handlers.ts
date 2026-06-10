@@ -12,8 +12,11 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
-import type { IQRCodeService } from '../../domain/interfaces/services.js';
-import type { IPaymentService } from '../../domain/interfaces/services.js';
+import type {
+  IQRCodeService,
+  IPaymentService,
+  IRemnawaveService,
+} from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { isAppError, NotFoundError } from '../../shared/errors/index.js';
 import { formatDate, formatCurrency } from '../../shared/utils/index.js';
@@ -71,6 +74,7 @@ export class BotHandlers {
     auditLogRepo: IAuditLogRepository,
     qrCodeService: IQRCodeService,
     paymentService: IPaymentService,
+    remnawaveService: IRemnawaveService,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -94,6 +98,7 @@ export class BotHandlers {
       this.subscriptionRepo,
       this.paymentRepo,
       this.auditLogRepo,
+      remnawaveService,
     );
   }
 

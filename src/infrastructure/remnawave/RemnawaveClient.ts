@@ -1,5 +1,5 @@
 import type { IRemnawaveService } from '../../domain/interfaces/services.js';
-import type { HwidDevice, HwidDevicesResult } from '../../shared/types/index.js';
+import type { HwidDevice, HwidDevicesResult, RemnawaveNode } from '../../shared/types/index.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { RemnawaveError } from '../../shared/errors/index.js';
 import { getEnv } from '../../shared/config/env.js';
@@ -52,6 +52,30 @@ interface RemnawaveCreateUserPayload {
   activeInternalSquads?: string[];
   uuid?: string;
   externalSquadUuid?: string | null;
+}
+
+interface RemnawaveNodeApi {
+  uuid: string;
+  name: string;
+  usersOnline: number;
+  isConnected: boolean;
+  isDisabled: boolean;
+  isConnecting: boolean;
+  versions?: {
+    xray?: string;
+  };
+  system?: {
+    stats?: {
+      memoryFree: number;
+      memoryUsed: number;
+      uptime: number;
+      loadAvg: number[];
+      interface?: {
+        rxBytesPerSec: number;
+        txBytesPerSec: number;
+      };
+    };
+  };
 }
 
 interface RemnawaveUpdateUserPayload {
@@ -421,6 +445,48 @@ export class RemnawaveClient implements IRemnawaveService {
       }
       throw error;
     }
+  }
+
+  async getNodes(): Promise<RemnawaveNode[]> {
+    const logger = getLogger();
+    logger.info('Fetching Remnawave nodes');
+
+    const raw = await this.request<RemnawaveApiResponse<RemnawaveNodeApi[]>>('GET', '/api/nodes');
+    const nodes = Array.isArray(raw.response) ? raw.response : [];
+
+    return nodes.map((node) => {
+      const stats = node.system?.stats;
+      const iface = stats?.interface;
+
+      return {
+        uuid: node.uuid,
+        name: node.name,
+        usersOnline: typeof node.usersOnline === 'number' ? node.usersOnline : 0,
+        isConnected: Boolean(node.isConnected),
+        isDisabled: Boolean(node.isDisabled),
+        isConnecting: Boolean(node.isConnecting),
+        versions: node.versions?.xray ? { xray: node.versions.xray } : undefined,
+        system: stats
+          ? {
+              stats: {
+                memoryFree: stats.memoryFree,
+                memoryUsed: stats.memoryUsed,
+                uptime: stats.uptime,
+                loadAvg: Array.isArray(stats.loadAvg) ? stats.loadAvg : [],
+                interface:
+                  iface &&
+                  typeof iface.rxBytesPerSec === 'number' &&
+                  typeof iface.txBytesPerSec === 'number'
+                    ? {
+                        rxBytesPerSec: iface.rxBytesPerSec,
+                        txBytesPerSec: iface.txBytesPerSec,
+                      }
+                    : undefined,
+              },
+            }
+          : undefined,
+      };
+    });
   }
 
   async deleteHwidDevice(remnawaveUserUuid: string, hwid: string): Promise<HwidDevicesResult> {

@@ -3,6 +3,7 @@ import type {
   PaymentResult,
   PaymentProvider,
   HwidDevicesResult,
+  RemnawaveNode,
 } from '../../shared/types/index.js';
 
 export interface IRemnawaveService {
@@ -44,6 +45,8 @@ export interface IRemnawaveService {
   getHwidDevices(remnawaveUserUuid: string): Promise<HwidDevicesResult>;
   /** POST /api/hwid/devices/delete — удаление устройства по hwid. */
   deleteHwidDevice(remnawaveUserUuid: string, hwid: string): Promise<HwidDevicesResult>;
+  /** GET /api/nodes — список VPN-нод. */
+  getNodes(): Promise<RemnawaveNode[]>;
 }
 
 export interface IPaymentService {

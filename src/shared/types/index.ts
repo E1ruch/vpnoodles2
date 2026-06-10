@@ -44,3 +44,31 @@ export interface HwidDevicesResult {
   total: number;
   devices: HwidDevice[];
 }
+
+export interface RemnawaveNodeInterfaceStats {
+  rxBytesPerSec: number;
+  txBytesPerSec: number;
+}
+
+export interface RemnawaveNodeStats {
+  memoryFree: number;
+  memoryUsed: number;
+  uptime: number;
+  loadAvg: number[];
+  interface?: RemnawaveNodeInterfaceStats;
+}
+
+export interface RemnawaveNode {
+  uuid: string;
+  name: string;
+  usersOnline: number;
+  isConnected: boolean;
+  isDisabled: boolean;
+  isConnecting: boolean;
+  versions?: {
+    xray?: string;
+  };
+  system?: {
+    stats?: RemnawaveNodeStats;
+  };
+}

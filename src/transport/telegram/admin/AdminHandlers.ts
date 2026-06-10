@@ -6,12 +6,14 @@ import type {
   IPaymentRepository,
   IAuditLogRepository,
 } from '../../../domain/interfaces/repositories.js';
+import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
+import type { RemnawaveNode } from '../../../shared/types/index.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { AuditLog } from '../../../domain/entities/AuditLog.js';
 import type { Subscription } from '../../../domain/entities/Subscription.js';
 import { getEnv } from '../../../shared/config/env.js';
 import { formatDate } from '../../../shared/utils/index.js';
-import { adminKeyboard, adminPaginatedKeyboard } from '../keyboards.js';
+import { adminBackKeyboard, adminKeyboard, adminPaginatedKeyboard } from '../keyboards.js';
 
 const ADMIN_USERS_PAGE_SIZE = 10;
 const ADMIN_LOGS_PAGE_SIZE = 6;
@@ -32,6 +34,7 @@ export class AdminHandlers {
     private subscriptionRepo: ISubscriptionRepository,
     private paymentRepo: IPaymentRepository,
     private auditLogRepo: IAuditLogRepository,
+    private remnawaveService: IRemnawaveService,
   ) {}
 
   register(bot: Telegraf): void {
@@ -45,6 +48,7 @@ export class AdminHandlers {
     bot.action('admin_subscriptions', this.handleAdminSubscriptions);
     bot.action(/^admin_subs_p(\d+)$/, this.handleAdminSubscriptions);
     bot.action('admin_payments', this.handleAdminPayments);
+    bot.action('admin_servers', this.handleAdminServers);
   }
 
   private isAdmin(ctx: Context): boolean {
@@ -254,6 +258,84 @@ export class AdminHandlers {
     }
   };
 
+  private formatNodeStatus(node: RemnawaveNode): string {
+    if (node.isDisabled) return '⚫ disabled';
+    if (node.isConnecting) return '🟡 connecting';
+    if (node.isConnected) return '🟢 online';
+    return '🔴 offline';
+  }
+
+  private formatBitrate(bytesPerSec: number | undefined): string {
+    if (bytesPerSec === undefined || !Number.isFinite(bytesPerSec) || bytesPerSec < 0) {
+      return '—';
+    }
+    const mbitPerSec = (bytesPerSec * 8) / 1_000_000;
+    if (mbitPerSec >= 10) return `${Math.round(mbitPerSec)} Мбит/с`;
+    if (mbitPerSec >= 1) return `${mbitPerSec.toFixed(1)} Мбит/с`;
+    const kbitPerSec = (bytesPerSec * 8) / 1_000;
+    return kbitPerSec >= 1 ? `${Math.round(kbitPerSec)} Кбит/с` : '0 Мбит/с';
+  }
+
+  private formatRamPercent(memoryUsed: number, memoryFree: number): string {
+    const total = memoryUsed + memoryFree;
+    if (!Number.isFinite(total) || total <= 0) return '—';
+    return `${Math.round((memoryUsed / total) * 100)}%`;
+  }
+
+  private formatCompactUptime(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0) return '—';
+    const days = Math.floor(seconds / 86400);
+    if (days > 0) return `${days}д`;
+    const hours = Math.floor(seconds / 3600);
+    if (hours > 0) return `${hours}ч`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}м`;
+  }
+
+  private formatNodeEntry(node: RemnawaveNode): string {
+    const stats = node.system?.stats;
+    const iface = stats?.interface;
+    const rx = this.formatBitrate(iface?.rxBytesPerSec);
+    const tx = this.formatBitrate(iface?.txBytesPerSec);
+
+    const line1 = `${node.name} · ${this.formatNodeStatus(node)} · 👥 ${node.usersOnline} · ⬇️ ${rx} ⬆️ ${tx}`;
+
+    if (!stats) {
+      return `${line1}\n⚠️ статистика недоступна`;
+    }
+
+    const load = stats.loadAvg[0];
+    const loadLabel = typeof load === 'number' && Number.isFinite(load) ? load.toFixed(1) : '—';
+    const xray = node.versions?.xray ?? '—';
+    const line2 = `RAM ${this.formatRamPercent(stats.memoryUsed, stats.memoryFree)} · load ${loadLabel} · xray ${xray} · uptime ${this.formatCompactUptime(stats.uptime)}`;
+
+    return `${line1}\n${line2}`;
+  }
+
+  private handleAdminServers = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    try {
+      const nodes = await this.remnawaveService.getNodes();
+      const totalUsersOnline = nodes.reduce((sum, node) => sum + node.usersOnline, 0);
+      let text = `🖥 Сервера\n`;
+      text += `Всего: ${nodes.length}\n`;
+      text += `👥 Онлайн: ${totalUsersOnline}\n\n`;
+
+      if (nodes.length === 0) {
+        text += 'Серверов пока нет.';
+      } else {
+        text += nodes.map((node) => this.formatNodeEntry(node)).join('\n\n');
+      }
+
+      await ctx.editMessageText(text.trimEnd(), {
+        reply_markup: adminBackKeyboard(),
+      });
+    } catch {
+      await ctx.reply('❌ Ошибка загрузки серверов');
+    }
+  };
+
   private handleAdminPayments = async (ctx: Context): Promise<void> => {
     if (!this.isAdmin(ctx)) return;
 
@@ -297,6 +379,6 @@ export class AdminHandlers {
       return;
     }
 
-    await ctx.reply('🔧 Админ-панель v. 1.3', replyOptions);
+    await ctx.reply('🔧 Админ-панель v. 1.4', replyOptions);
   };
 }

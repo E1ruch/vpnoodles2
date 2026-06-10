@@ -142,6 +142,7 @@ export function createContainer(): AppContainer {
     auditLogRepo,
     qrCodeService,
     paymentService,
+    remnawaveService,
   );
 
   logger.info('Container initialized');
