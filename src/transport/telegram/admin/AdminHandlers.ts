@@ -7,17 +7,39 @@ import type {
   IAuditLogRepository,
 } from '../../../domain/interfaces/repositories.js';
 import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
+import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
+import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import type { RemnawaveNode } from '../../../shared/types/index.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { AuditLog } from '../../../domain/entities/AuditLog.js';
 import type { Subscription } from '../../../domain/entities/Subscription.js';
 import { getEnv } from '../../../shared/config/env.js';
-import { formatDate } from '../../../shared/utils/index.js';
-import { adminBackKeyboard, adminKeyboard, adminPaginatedKeyboard } from '../keyboards.js';
+import { formatDate, sleep } from '../../../shared/utils/index.js';
+import { getLogger } from '../../../shared/logger/index.js';
+import {
+  adminBackKeyboard,
+  adminBroadcastCancelKeyboard,
+  adminBroadcastConfirmKeyboard,
+  adminBroadcastKeyboard,
+  adminKeyboard,
+  adminPaginatedKeyboard,
+} from '../keyboards.js';
 
 const ADMIN_USERS_PAGE_SIZE = 10;
 const ADMIN_LOGS_PAGE_SIZE = 6;
 const ADMIN_SUBS_PAGE_SIZE = 6;
+const BROADCAST_GIFT_DAYS = 7;
+const BROADCAST_DELAY_MS = 50;
+
+const EXPIRED_GIFT_MESSAGE = `🎁 Приятный сюрприз от VPN Лапша!
+
+Мы продлили вашу подписку на ${BROADCAST_GIFT_DAYS} дней — совершенно бесплатно.
+
+🚀 Снова доступны все серверы и быстрое подключение. Откройте «🌐 Мой VPN» в боте — ссылка уже ждёт вас.
+
+Не упустите момент — загляните сегодня и оцените, как удобно пользоваться VPN без лишних хлопот.
+
+Приятного серфинга! 🍜`;
 
 const ACTION_LABELS: Record<string, string> = {
   user_registered: '👤 Регистрация',
@@ -25,19 +47,28 @@ const ACTION_LABELS: Record<string, string> = {
   subscription_purchased: '💎 Покупка подписки',
   subscription_renewed: '🔄 Продление',
   telegram_payment_successful: '💳 Оплата в Telegram',
+  broadcast_all: '📢 Рассылка всем',
+  broadcast_expired_gift: '🎁 Подарок истёкшим',
+  sync_remnawave: '🔄 Синхронизация Remnawave',
 };
 
 export class AdminHandlers {
+  private pendingCustomBroadcast = new Set<number>();
+
   constructor(
+    private bot: Telegraf,
     private userRepo: IUserRepository,
     private planRepo: IPlanRepository,
     private subscriptionRepo: ISubscriptionRepository,
     private paymentRepo: IPaymentRepository,
     private auditLogRepo: IAuditLogRepository,
     private remnawaveService: IRemnawaveService,
+    private renewSubscription: RenewSubscriptionUseCase,
+    private syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
   ) {}
 
   register(bot: Telegraf): void {
+    bot.use(this.handleAdminTextMiddleware);
     bot.command('admin', this.handleAdmin);
     bot.action('admin_menu', this.handleAdmin);
     bot.action('admin_users', this.handleAdminUsers);
@@ -49,6 +80,12 @@ export class AdminHandlers {
     bot.action(/^admin_subs_p(\d+)$/, this.handleAdminSubscriptions);
     bot.action('admin_payments', this.handleAdminPayments);
     bot.action('admin_servers', this.handleAdminServers);
+    bot.action('admin_broadcast', this.handleAdminBroadcast);
+    bot.action('admin_broadcast_all', this.handleAdminBroadcastAll);
+    bot.action('admin_broadcast_cancel', this.handleAdminBroadcastCancel);
+    bot.action('admin_broadcast_expired', this.handleAdminBroadcastExpired);
+    bot.action('admin_broadcast_expired_confirm', this.handleAdminBroadcastExpiredConfirm);
+    bot.action('admin_sync', this.handleAdminSync);
   }
 
   private isAdmin(ctx: Context): boolean {
@@ -74,6 +111,34 @@ export class AdminHandlers {
     }
 
     return adminIds.has(telegramId);
+  }
+
+  private isMessageNotModifiedError(err: unknown): boolean {
+    const description =
+      err && typeof err === 'object' && 'description' in err
+        ? String((err as { description: unknown }).description)
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return description.includes('message is not modified');
+  }
+
+  private async safeEditMessageText(
+    ctx: Context,
+    text: string,
+    extra?: Parameters<Context['editMessageText']>[1],
+  ): Promise<void> {
+    try {
+      await ctx.editMessageText(text, extra);
+    } catch (err) {
+      if (this.isMessageNotModifiedError(err)) {
+        if (ctx.callbackQuery) {
+          await ctx.answerCbQuery().catch(() => undefined);
+        }
+        return;
+      }
+      throw err;
+    }
   }
 
   private parsePage(ctx: Context, fallback = 0): number {
@@ -144,7 +209,7 @@ export class AdminHandlers {
         });
       }
 
-      await ctx.editMessageText(text, {
+      await this.safeEditMessageText(ctx,text, {
         reply_markup: adminPaginatedKeyboard('users', page, totalPages),
       });
     } catch {
@@ -163,7 +228,7 @@ export class AdminHandlers {
 
       const text = `📊 Статистика:\n\n👥 Пользователей: ${usersCount}\n💳 Подписок: ${subscriptionsCount}\n💰 Платежей: ${paymentsCount}\n📋 Логов: ${logsCount}`;
 
-      await ctx.editMessageText(text, {
+      await this.safeEditMessageText(ctx,text, {
         reply_markup: {
           inline_keyboard: [[{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }]],
         },
@@ -200,7 +265,7 @@ export class AdminHandlers {
         });
       }
 
-      await ctx.editMessageText(text, {
+      await this.safeEditMessageText(ctx,text, {
         reply_markup: adminPaginatedKeyboard('logs', page, totalPages),
       });
     } catch {
@@ -250,7 +315,7 @@ export class AdminHandlers {
         }
       }
 
-      await ctx.editMessageText(text.trimEnd(), {
+      await this.safeEditMessageText(ctx,text.trimEnd(), {
         reply_markup: adminPaginatedKeyboard('subs', page, totalPages),
       });
     } catch {
@@ -328,7 +393,7 @@ export class AdminHandlers {
         text += nodes.map((node) => this.formatNodeEntry(node)).join('\n\n');
       }
 
-      await ctx.editMessageText(text.trimEnd(), {
+      await this.safeEditMessageText(ctx,text.trimEnd(), {
         reply_markup: adminBackKeyboard(),
       });
     } catch {
@@ -356,7 +421,7 @@ export class AdminHandlers {
       }
       if (payments.length > 10) text += `\n... и ещё ${payments.length - 10} платежей`;
 
-      await ctx.editMessageText(text, {
+      await this.safeEditMessageText(ctx,text, {
         reply_markup: {
           inline_keyboard: [[{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }]],
         },
@@ -372,13 +437,280 @@ export class AdminHandlers {
       return;
     }
 
+    this.pendingCustomBroadcast.delete(ctx.from?.id ?? 0);
+
     const replyOptions = { reply_markup: adminKeyboard() };
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText('🔧 Админ-панель v. 1.4', replyOptions);
+      await this.safeEditMessageText(ctx,'🔧 Админ-панель v. 1.6', replyOptions);
       return;
     }
 
-    await ctx.reply('🔧 Админ-панель v. 1.4', replyOptions);
+    await ctx.reply('🔧 Админ-панель v. 1.6', replyOptions);
   };
+
+  private handleAdminSync = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    const adminId = ctx.from?.id;
+    if (!adminId) return;
+
+    await this.safeEditMessageText(
+      ctx,
+      '⏳ Синхронизация с Remnawave…\n\nПодтягиваем даты, статусы, устройства и ссылки подписок в БД.',
+      { reply_markup: adminBackKeyboard() },
+    );
+
+    try {
+      const result = await this.syncAllFromRemnawave.execute();
+
+      const adminUser = await this.userRepo.findByTelegramId(adminId);
+      if (adminUser) {
+        await this.auditLogRepo.create({
+          userId: adminUser.id,
+          action: 'sync_remnawave',
+          entityType: 'sync',
+          metadata: { ...result } as Record<string, unknown>,
+        });
+      }
+
+      const text = `🔄 Синхронизация завершена
+
+Источник: Remnawave → БД
+
+📋 Подписок в БД: ${result.totalSubscriptions}
+🔗 С Remnawave ID: ${result.remnawaveUsers}
+✅ Обновлено записей: ${result.updatedSubscriptions}
+👤 Пользователей Remnawave: ${result.syncedRemnawaveUsers}${result.failedRemnawaveUsers > 0 ? `\n❌ Ошибок: ${result.failedRemnawaveUsers}` : ''}${result.skippedNoRemnawave > 0 ? `\n⏭ Без Remnawave: ${result.skippedNoRemnawave}` : ''}`;
+
+      await this.safeEditMessageText(ctx, text, { reply_markup: adminKeyboard() });
+    } catch {
+      await this.safeEditMessageText(ctx, '❌ Ошибка синхронизации с Remnawave', {
+        reply_markup: adminKeyboard(),
+      });
+    }
+  };
+
+  private handleAdminBroadcast = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    this.pendingCustomBroadcast.delete(ctx.from?.id ?? 0);
+
+    const text = `📢 Рассылка
+
+Выберите тип рассылки:
+
+✉️ Текст всем — отправить своё сообщение каждому пользователю бота.
+
+🎁 Подарок истёкшим — продлить подписку на ${BROADCAST_GIFT_DAYS} дней и отправить заготовленное сообщение только тем, у кого подписка истекла.`;
+
+    await this.safeEditMessageText(ctx,text, { reply_markup: adminBroadcastKeyboard() });
+  };
+
+  private handleAdminBroadcastAll = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    const adminId = ctx.from?.id;
+    if (!adminId) return;
+
+    this.pendingCustomBroadcast.add(adminId);
+
+    const usersCount = await this.userRepo.count();
+    const text = `✉️ Рассылка всем
+
+Получателей: ${usersCount}
+
+Отправьте следующим сообщением текст рассылки.`;
+
+    await this.safeEditMessageText(ctx,text, { reply_markup: adminBroadcastCancelKeyboard() });
+  };
+
+  private handleAdminBroadcastCancel = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    this.pendingCustomBroadcast.delete(ctx.from?.id ?? 0);
+    await this.handleAdminBroadcast(ctx);
+  };
+
+  private handleAdminTextMiddleware = async (ctx: Context, next: () => Promise<void>): Promise<void> => {
+    const adminId = ctx.from?.id;
+    if (!adminId || !this.isAdmin(ctx) || !this.pendingCustomBroadcast.has(adminId)) {
+      return next();
+    }
+
+    const message = ctx.message;
+    if (!message || !('text' in message) || !message.text) {
+      return next();
+    }
+
+    if (message.text.startsWith('/')) {
+      return next();
+    }
+
+    this.pendingCustomBroadcast.delete(adminId);
+    await this.runBroadcastAll(ctx, message.text);
+  };
+
+  private handleAdminBroadcastExpired = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    this.pendingCustomBroadcast.delete(ctx.from?.id ?? 0);
+
+    const expired = await this.findUsersWithExpiredSubscription();
+    const text =
+      expired.length === 0
+        ? `🎁 Подарок истёкшим
+
+Получателей: 0
+
+Сейчас нет пользователей с истёкшей подпиской в БД.`
+        : `🎁 Подарок истёкшим
+
+Получателей: ${expired.length}
+Действие: продление на ${BROADCAST_GIFT_DAYS} дней + сообщение
+
+Текст сообщения:
+${EXPIRED_GIFT_MESSAGE}`;
+
+    await this.safeEditMessageText(ctx, text, {
+      reply_markup: expired.length > 0 ? adminBroadcastConfirmKeyboard() : adminBackKeyboard(),
+    });
+  };
+
+  private handleAdminBroadcastExpiredConfirm = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    const adminId = ctx.from?.id;
+    if (!adminId) return;
+
+    await this.safeEditMessageText(ctx,'⏳ Запускаю рассылку истёкшим…', {
+      reply_markup: adminBackKeyboard(),
+    });
+
+    const expired = await this.findUsersWithExpiredSubscription();
+    let renewed = 0;
+    let renewFailed = 0;
+    let sent = 0;
+    let sendFailed = 0;
+
+    for (const { user, subscription } of expired) {
+      try {
+        await this.renewSubscription.execute(subscription.id, BROADCAST_GIFT_DAYS);
+        renewed++;
+      } catch (err) {
+        renewFailed++;
+        getLogger().warn({ err, userId: user.id, subscriptionId: subscription.id }, 'Gift renew failed');
+        continue;
+      }
+
+      try {
+        await this.bot.telegram.sendMessage(Number(user.telegramId), EXPIRED_GIFT_MESSAGE);
+        sent++;
+      } catch (err) {
+        sendFailed++;
+        getLogger().warn({ err, telegramId: user.telegramId }, 'Gift broadcast send failed');
+      }
+
+      await sleep(BROADCAST_DELAY_MS);
+    }
+
+    const adminUser = await this.userRepo.findByTelegramId(adminId);
+    if (adminUser) {
+      await this.auditLogRepo.create({
+        userId: adminUser.id,
+        action: 'broadcast_expired_gift',
+        entityType: 'broadcast',
+        metadata: {
+          recipients: expired.length,
+          renewed,
+          renewFailed,
+          sent,
+          sendFailed,
+          giftDays: BROADCAST_GIFT_DAYS,
+        },
+      });
+    }
+
+    const report = `✅ Рассылка завершена
+
+👥 Получателей: ${expired.length}
+🔄 Продлено: ${renewed}${renewFailed > 0 ? ` (ошибок: ${renewFailed})` : ''}
+📨 Отправлено: ${sent}${sendFailed > 0 ? ` (ошибок: ${sendFailed})` : ''}`;
+
+    await this.safeEditMessageText(ctx,report, { reply_markup: adminBroadcastKeyboard() });
+  };
+
+  private async findUsersWithExpiredSubscription(): Promise<
+    Array<{ user: User; subscription: Subscription }>
+  > {
+    const now = new Date();
+    const users = await this.userRepo.findAll();
+    const result: Array<{ user: User; subscription: Subscription }> = [];
+
+    for (const user of users) {
+      const active = await this.subscriptionRepo.findActiveByUserId(user.id);
+      if (active && active.endDate > now) continue;
+
+      const subscriptions = await this.subscriptionRepo.findByUserId(user.id);
+      if (subscriptions.length === 0) continue;
+
+      const latest = subscriptions.sort((a, b) => b.endDate.getTime() - a.endDate.getTime())[0];
+      if (!latest) continue;
+
+      const isExpired = latest.status === 'expired' || latest.endDate <= now;
+      if (isExpired) {
+        result.push({ user, subscription: latest });
+      }
+    }
+
+    return result;
+  }
+
+  private runBroadcastAll = async (ctx: Context, text: string): Promise<void> => {
+    const adminId = ctx.from?.id;
+    if (!adminId) return;
+
+    await ctx.reply('⏳ Отправляю рассылку…');
+
+    const users = await this.userRepo.findAll();
+    const telegramIds = users.map((u) => Number(u.telegramId));
+
+    const { sent, failed } = await this.sendTelegramMessages(telegramIds, text);
+
+    const adminUser = await this.userRepo.findByTelegramId(adminId);
+    if (adminUser) {
+      await this.auditLogRepo.create({
+        userId: adminUser.id,
+        action: 'broadcast_all',
+        entityType: 'broadcast',
+        metadata: { recipients: users.length, sent, failed },
+      });
+    }
+
+    await ctx.reply(
+      `✅ Рассылка завершена\n\n👥 Всего: ${users.length}\n📨 Отправлено: ${sent}${failed > 0 ? `\n❌ Ошибок: ${failed}` : ''}`,
+      { reply_markup: adminBroadcastKeyboard() },
+    );
+  };
+
+  private async sendTelegramMessages(
+    telegramIds: number[],
+    text: string,
+  ): Promise<{ sent: number; failed: number }> {
+    let sent = 0;
+    let failed = 0;
+
+    for (const telegramId of telegramIds) {
+      try {
+        await this.bot.telegram.sendMessage(telegramId, text);
+        sent++;
+      } catch (err) {
+        failed++;
+        getLogger().warn({ err, telegramId }, 'Broadcast send failed');
+      }
+      await sleep(BROADCAST_DELAY_MS);
+    }
+
+    return { sent, failed };
+  }
 }

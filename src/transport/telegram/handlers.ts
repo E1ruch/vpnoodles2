@@ -6,6 +6,7 @@ import type { PurchasePlanUseCase } from '../../application/usecases/PurchasePla
 import type { RenewSubscriptionUseCase } from '../../application/usecases/RenewSubscriptionUseCase.js';
 import type { GetUserDevicesUseCase } from '../../application/usecases/GetUserDevicesUseCase.js';
 import type { DeleteUserDeviceUseCase } from '../../application/usecases/DeleteUserDeviceUseCase.js';
+import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import type { HwidDevice } from '../../shared/types/index.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
@@ -75,6 +76,7 @@ export class BotHandlers {
     qrCodeService: IQRCodeService,
     paymentService: IPaymentService,
     remnawaveService: IRemnawaveService,
+    syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -93,12 +95,15 @@ export class BotHandlers {
     this.paymentService = paymentService;
     this.yooKassaService = new YooKassaService();
     this.adminHandlers = new AdminHandlers(
+      bot,
       this.userRepo,
       this.planRepo,
       this.subscriptionRepo,
       this.paymentRepo,
       this.auditLogRepo,
       remnawaveService,
+      renewSubscription,
+      syncAllFromRemnawave,
     );
   }
 

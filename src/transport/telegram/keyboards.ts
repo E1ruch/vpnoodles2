@@ -55,6 +55,8 @@ export function adminKeyboard(): InlineKeyboardMarkup {
         { text: '💰 Платежи', callback_data: 'admin_payments' },
         { text: '🖥 Сервера', callback_data: 'admin_servers' },
       ],
+      [{ text: '📢 Рассылка', callback_data: 'admin_broadcast' }],
+      [{ text: '🔄 Синхронизация с БД', callback_data: 'admin_sync' }],
       [{ text: 'Назад', callback_data: 'back_main' }],
     ],
   };
@@ -63,6 +65,31 @@ export function adminKeyboard(): InlineKeyboardMarkup {
 export function adminBackKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [[{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }]],
+  };
+}
+
+export function adminBroadcastKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '✉️ Текст всем пользователям', callback_data: 'admin_broadcast_all' }],
+      [{ text: '🎁 Подарок истёкшим (+7 дней)', callback_data: 'admin_broadcast_expired' }],
+      [{ text: 'Назад в админ-панель', callback_data: 'admin_menu' }],
+    ],
+  };
+}
+
+export function adminBroadcastConfirmKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '✅ Отправить', callback_data: 'admin_broadcast_expired_confirm' }],
+      [{ text: 'Отмена', callback_data: 'admin_broadcast' }],
+    ],
+  };
+}
+
+export function adminBroadcastCancelKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[{ text: 'Отмена', callback_data: 'admin_broadcast_cancel' }]],
   };
 }
 

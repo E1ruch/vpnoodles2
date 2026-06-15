@@ -25,6 +25,7 @@ import { SyncSubscriptionDevicesUseCase } from '../application/usecases/SyncSubs
 import { SyncSubscriptionExpiryUseCase } from '../application/usecases/SyncSubscriptionExpiryUseCase.js';
 import { GetUserDevicesUseCase } from '../application/usecases/GetUserDevicesUseCase.js';
 import { DeleteUserDeviceUseCase } from '../application/usecases/DeleteUserDeviceUseCase.js';
+import { SyncAllSubscriptionsFromRemnawaveUseCase } from '../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -124,6 +125,12 @@ export function createContainer(): AppContainer {
     remnawaveService,
     syncSubscriptionDevicesUseCase,
   );
+  const syncAllSubscriptionsFromRemnawaveUseCase = new SyncAllSubscriptionsFromRemnawaveUseCase(
+    subscriptionRepo,
+    remnawaveService,
+    syncSubscriptionExpiryUseCase,
+    syncSubscriptionDevicesUseCase,
+  );
 
   // Handlers
   const handlers = new BotHandlers(
@@ -143,6 +150,7 @@ export function createContainer(): AppContainer {
     qrCodeService,
     paymentService,
     remnawaveService,
+    syncAllSubscriptionsFromRemnawaveUseCase,
   );
 
   logger.info('Container initialized');
