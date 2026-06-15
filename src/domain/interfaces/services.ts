@@ -37,6 +37,10 @@ export interface IRemnawaveService {
       expireAt: Date;
     },
   ): Promise<void>;
+  /** GET /api/users/{uuid} → expireAt и статус для зеркала в БД. */
+  getUserSubscriptionState(
+    remnawaveUserUuid: string,
+  ): Promise<{ expireAt: Date; status: 'active' | 'expired' } | null>;
   /** GET /api/users/{uuid} → expireAt. */
   getUserExpireAt(remnawaveUserUuid: string): Promise<Date | null>;
   /** GET /api/hwid/devices/{userUuid} → response.total (количество устройств). */

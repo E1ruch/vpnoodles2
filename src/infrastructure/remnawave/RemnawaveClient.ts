@@ -232,13 +232,19 @@ export class RemnawaveClient implements IRemnawaveService {
 
     await this.withRetry(async () => {
       const currentUser = await this.getUser(remnawaveUserId);
+      const currentExpiry = new Date(currentUser.expireAt);
+      const expireAt =
+        currentExpiry.getTime() > Date.now()
+          ? currentUser.expireAt
+          : new Date().toISOString();
+
       const payload: RemnawaveUpdateUserPayload = {
         uuid: remnawaveUserId,
         username: currentUser.username,
         status: 'ACTIVE',
         trafficLimitBytes: currentUser.trafficLimitBytes,
         trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt: currentUser.expireAt,
+        expireAt,
         description: currentUser.description,
         tag: currentUser.tag,
         telegramId: currentUser.telegramId,
@@ -347,7 +353,7 @@ export class RemnawaveClient implements IRemnawaveService {
       const payload: RemnawaveUpdateUserPayload = {
         uuid: remnawaveUserId,
         username: currentUser.username,
-        status: currentUser.status,
+        status: 'ACTIVE',
         trafficLimitBytes: currentUser.trafficLimitBytes,
         trafficLimitStrategy: currentUser.trafficLimitStrategy,
         expireAt: newExpiry.toISOString(),
@@ -404,7 +410,9 @@ export class RemnawaveClient implements IRemnawaveService {
     });
   }
 
-  async getUserExpireAt(remnawaveUserUuid: string): Promise<Date | null> {
+  async getUserSubscriptionState(
+    remnawaveUserUuid: string,
+  ): Promise<{ expireAt: Date; status: 'active' | 'expired' } | null> {
     const logger = getLogger();
 
     try {
@@ -414,14 +422,22 @@ export class RemnawaveClient implements IRemnawaveService {
         logger.warn({ remnawaveUserUuid, expireAt: user.expireAt }, 'Invalid expireAt from Remnawave');
         return null;
       }
-      return expireAt;
+
+      const now = new Date();
+      const status = user.status === 'ACTIVE' && expireAt > now ? 'active' : 'expired';
+      return { expireAt, status };
     } catch (error) {
       if (error instanceof RemnawaveError && error.message.includes('404')) {
-        logger.info({ remnawaveUserUuid }, 'Remnawave user expireAt: 404 → skip sync');
+        logger.info({ remnawaveUserUuid }, 'Remnawave user state: 404 → skip sync');
         return null;
       }
       throw error;
     }
+  }
+
+  async getUserExpireAt(remnawaveUserUuid: string): Promise<Date | null> {
+    const state = await this.getUserSubscriptionState(remnawaveUserUuid);
+    return state?.expireAt ?? null;
   }
 
   async getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number> {

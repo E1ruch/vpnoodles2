@@ -375,7 +375,7 @@ export class AdminHandlers {
     const replyOptions = { reply_markup: adminKeyboard() };
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText('🔧 Админ-панель v. 1.3', replyOptions);
+      await ctx.editMessageText('🔧 Админ-панель v. 1.4', replyOptions);
       return;
     }
 

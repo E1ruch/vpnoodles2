@@ -30,14 +30,8 @@ export class RenewSubscriptionUseCase {
     const plan = await this.planRepo.findById(subscription.planId);
     if (!plan) throw new ValidationError('Plan not found');
 
-    const currentEnd = subscription.endDate > new Date() ? subscription.endDate : new Date();
-    const estimatedEndDate = new Date(currentEnd);
-    estimatedEndDate.setDate(estimatedEndDate.getDate() + additionalDays);
-
-    // Сначала продлеваем в Remnawave, чтобы синхронизация не откатила дату в БД
     if (subscription.remnawaveUserId) {
       try {
-        await this.remnawaveService.resumeUser(subscription.remnawaveUserId);
         await this.remnawaveService.extendUser(subscription.remnawaveUserId, additionalDays);
         const newTag = plan.remnawaveTag ?? (plan.type === 'trial' ? 'TRIAL' : 'PAID');
         await this.remnawaveService.updateUserTag(subscription.remnawaveUserId, newTag);
@@ -53,19 +47,41 @@ export class RenewSubscriptionUseCase {
           `Remnawave user is missing for subscription ${subscriptionId}. Manual resync required.`,
         );
       }
+
+      await this.syncSubscriptionExpiry.execute(subscriptionId);
+
+      const synced = await this.subscriptionRepo.findById(subscriptionId);
+      if (!synced) {
+        throw new ValidationError('Subscription not found after sync');
+      }
+
+      if (synced.status !== 'active' || synced.endDate <= new Date()) {
+        throw new SubscriptionError(
+          'Renewal failed: Remnawave subscription is still inactive or expired',
+        );
+      }
+
+      await this.auditLogRepo.create({
+        userId: subscription.userId,
+        action: 'subscription_renewed',
+        entityType: 'subscription',
+        entityId: subscriptionId,
+        metadata: { additionalDays, newEndDate: synced.endDate.toISOString() },
+      });
+
+      logger.info({ subscriptionId, additionalDays }, 'Subscription renewed from Remnawave');
+      return { endDate: synced.endDate };
     }
+
+    // Подписка без Remnawave — единственный случай, когда пишем в БД напрямую
+    const currentEnd = subscription.endDate > new Date() ? subscription.endDate : new Date();
+    const endDate = new Date(currentEnd);
+    endDate.setDate(endDate.getDate() + additionalDays);
 
     await this.subscriptionRepo.update(subscriptionId, {
       status: 'active',
-      endDate: estimatedEndDate,
+      endDate,
     });
-
-    if (subscription.remnawaveUserId) {
-      await this.syncSubscriptionExpiry.execute(subscriptionId);
-    }
-
-    const updated = await this.subscriptionRepo.findById(subscriptionId);
-    const endDate = updated?.endDate ?? estimatedEndDate;
 
     await this.auditLogRepo.create({
       userId: subscription.userId,
@@ -75,7 +91,7 @@ export class RenewSubscriptionUseCase {
       metadata: { additionalDays, newEndDate: endDate.toISOString() },
     });
 
-    logger.info({ subscriptionId, additionalDays }, 'Subscription renewed');
+    logger.info({ subscriptionId, additionalDays }, 'Subscription renewed in DB (no Remnawave user)');
     return { endDate };
   }
 }

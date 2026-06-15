@@ -47,10 +47,13 @@ export class GetSubscriptionUseCase {
       if (refreshed) subscription = refreshed;
     }
 
-    if (subscription.status === 'active' && subscription.endDate <= now) {
-      subscription = await this.subscriptionRepo.update(subscription.id, { status: 'expired' });
-    } else if (subscription.status === 'expired' && subscription.endDate > now) {
-      subscription = await this.subscriptionRepo.update(subscription.id, { status: 'active' });
+    // Без Remnawave статус выводим из дат в БД; с Remnawave — только что синхронизировали выше
+    if (!subscription.remnawaveUserId) {
+      if (subscription.status === 'active' && subscription.endDate <= now) {
+        subscription = await this.subscriptionRepo.update(subscription.id, { status: 'expired' });
+      } else if (subscription.status === 'expired' && subscription.endDate > now) {
+        subscription = await this.subscriptionRepo.update(subscription.id, { status: 'active' });
+      }
     }
 
     const plan = await this.planRepo.findById(subscription.planId);

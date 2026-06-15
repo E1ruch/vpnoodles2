@@ -3,7 +3,8 @@ import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 
 /**
- * Подтягивает expireAt из Remnawave (GET /api/users/{uuid}) и пишет в subscriptions.endDate.
+ * Зеркалит expireAt и status из Remnawave (GET /api/users/{uuid}) в subscriptions.
+ * Remnawave — источник истины, БД только для бота.
  */
 export class SyncSubscriptionExpiryUseCase {
   constructor(
@@ -17,12 +18,15 @@ export class SyncSubscriptionExpiryUseCase {
     if (!sub?.remnawaveUserId) return;
 
     try {
-      const expireAt = await this.remnawaveService.getUserExpireAt(sub.remnawaveUserId);
-      if (!expireAt) return;
+      const state = await this.remnawaveService.getUserSubscriptionState(sub.remnawaveUserId);
+      if (!state) return;
 
-      await this.subscriptionRepo.update(sub.id, { endDate: expireAt });
+      await this.subscriptionRepo.update(sub.id, {
+        endDate: state.expireAt,
+        status: state.status,
+      });
     } catch (err) {
-      logger.warn({ err, subscriptionId }, 'Sync subscription endDate (expireAt) failed');
+      logger.warn({ err, subscriptionId }, 'Sync subscription state from Remnawave failed');
     }
   }
 }
