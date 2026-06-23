@@ -94,6 +94,15 @@ export function adminBroadcastCancelKeyboard(): InlineKeyboardMarkup {
   };
 }
 
+export function adminMigrateConfirmKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '✅ Продолжить миграцию', callback_data: 'admin_migrate_remnawave_confirm' }],
+      [{ text: 'Отмена', callback_data: 'admin_menu' }],
+    ],
+  };
+}
+
 export type AdminListSection = 'users' | 'logs' | 'subs';
 
 export function adminPaginatedKeyboard(

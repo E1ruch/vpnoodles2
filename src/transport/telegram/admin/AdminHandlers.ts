@@ -9,7 +9,7 @@ import type {
 import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
 import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
-import type { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
+import { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { RemnawaveNode } from '../../../shared/types/index.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { AuditLog } from '../../../domain/entities/AuditLog.js';
@@ -23,6 +23,7 @@ import {
   adminBroadcastConfirmKeyboard,
   adminBroadcastKeyboard,
   adminKeyboard,
+  adminMigrateConfirmKeyboard,
   adminPaginatedKeyboard,
 } from '../keyboards.js';
 
@@ -105,6 +106,7 @@ export class AdminHandlers {
     bot.action('admin_broadcast_expired_confirm', this.handleAdminBroadcastExpiredConfirm);
     bot.action('admin_sync', this.handleAdminSync);
     bot.action('admin_migrate_remnawave', this.handleAdminMigrateRemnawave);
+    bot.action('admin_migrate_remnawave_confirm', this.handleAdminMigrateRemnawaveConfirm);
   }
 
   private isAdmin(ctx: Context): boolean {
@@ -461,11 +463,11 @@ export class AdminHandlers {
     const replyOptions = { reply_markup: adminKeyboard() };
 
     if (ctx.callbackQuery) {
-      await this.safeEditMessageText(ctx,'🔧 Админ-панель v. 1.6', replyOptions);
+      await this.safeEditMessageText(ctx,'🔧 Админ-панель v. 1.7', replyOptions);
       return;
     }
 
-    await ctx.reply('🔧 Админ-панель v. 1.6', replyOptions);
+    await ctx.reply('🔧 Админ-панель v. 1.7', replyOptions);
   };
 
   private handleAdminSync = async (ctx: Context): Promise<void> => {
@@ -511,6 +513,34 @@ export class AdminHandlers {
   };
 
   private handleAdminMigrateRemnawave = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    try {
+      const subscriptions = await this.subscriptionRepo.findAll();
+      const userCount = new Set(subscriptions.map((sub) => sub.userId)).size;
+      const bonusDays = MigrateUsersToRemnawaveUseCase.MIGRATION_BONUS_DAYS;
+
+      const text = `🚚 Миграция в Remnawave
+
+⚠️ Операция необратима и затронет всех пользователей с подписками.
+
+Что произойдёт:
+• пересоздание/обновление пользователей в Remnawave
+• +${bonusDays} дней к подписке каждому
+• новые ссылки подписки в БД
+• рассылка уведомлений всем мигрированным
+
+👥 Пользователей к обработке: ${userCount}
+
+Продолжить?`;
+
+      await this.safeEditMessageText(ctx, text, { reply_markup: adminMigrateConfirmKeyboard() });
+    } catch {
+      await ctx.reply('❌ Ошибка подготовки миграции', { reply_markup: adminKeyboard() });
+    }
+  };
+
+  private handleAdminMigrateRemnawaveConfirm = async (ctx: Context): Promise<void> => {
     if (!this.isAdmin(ctx)) return;
 
     const adminId = ctx.from?.id;
