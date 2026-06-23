@@ -7,6 +7,7 @@ import type { RenewSubscriptionUseCase } from '../../application/usecases/RenewS
 import type { GetUserDevicesUseCase } from '../../application/usecases/GetUserDevicesUseCase.js';
 import type { DeleteUserDeviceUseCase } from '../../application/usecases/DeleteUserDeviceUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
+import type { MigrateUsersToRemnawaveUseCase } from '../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { HwidDevice } from '../../shared/types/index.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
@@ -77,6 +78,7 @@ export class BotHandlers {
     paymentService: IPaymentService,
     remnawaveService: IRemnawaveService,
     syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
+    migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -104,6 +106,7 @@ export class BotHandlers {
       remnawaveService,
       renewSubscription,
       syncAllFromRemnawave,
+      migrateUsersToRemnawave,
     );
   }
 

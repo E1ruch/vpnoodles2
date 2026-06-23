@@ -9,6 +9,7 @@ import type {
 import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
 import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
+import type { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { RemnawaveNode } from '../../../shared/types/index.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { AuditLog } from '../../../domain/entities/AuditLog.js';
@@ -41,6 +42,21 @@ const EXPIRED_GIFT_MESSAGE = `🎁 Приятный сюрприз от VPN Ла
 
 Приятного серфинга! 🍜`;
 
+const MIGRATION_BROADCAST_MESSAGE = `⚠️ Техническое уведомление
+
+Из-за сбоя мы перенесли вашу подписку на новую инфраструктуру.
+
+🎁 В качестве извинений добавили +5 дней к подписке.
+
+🔗 Новая ссылка для подключения:
+{url}
+
+Пожалуйста, обновите подписку в VPN-приложении:
+1) Удалите старую подписку
+2) Добавьте новую ссылку
+
+Если возникнут сложности — напишите в поддержку.`;
+
 const ACTION_LABELS: Record<string, string> = {
   user_registered: '👤 Регистрация',
   trial_activated: '🆓 Активация trial',
@@ -50,6 +66,7 @@ const ACTION_LABELS: Record<string, string> = {
   broadcast_all: '📢 Рассылка всем',
   broadcast_expired_gift: '🎁 Подарок истёкшим',
   sync_remnawave: '🔄 Синхронизация Remnawave',
+  migrate_remnawave: '🚚 Миграция в Remnawave',
 };
 
 export class AdminHandlers {
@@ -65,6 +82,7 @@ export class AdminHandlers {
     private remnawaveService: IRemnawaveService,
     private renewSubscription: RenewSubscriptionUseCase,
     private syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
+    private migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
   ) {}
 
   register(bot: Telegraf): void {
@@ -86,6 +104,7 @@ export class AdminHandlers {
     bot.action('admin_broadcast_expired', this.handleAdminBroadcastExpired);
     bot.action('admin_broadcast_expired_confirm', this.handleAdminBroadcastExpiredConfirm);
     bot.action('admin_sync', this.handleAdminSync);
+    bot.action('admin_migrate_remnawave', this.handleAdminMigrateRemnawave);
   }
 
   private isAdmin(ctx: Context): boolean {
@@ -491,6 +510,61 @@ export class AdminHandlers {
     }
   };
 
+  private handleAdminMigrateRemnawave = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    const adminId = ctx.from?.id;
+    if (!adminId) return;
+
+    await this.safeEditMessageText(
+      ctx,
+      '⏳ Запускаю миграцию в Remnawave…\n\nПереносим подписки, добавляем +5 дней всем, обновляем ссылки и отправляем уведомления.',
+      { reply_markup: adminBackKeyboard() },
+    );
+
+    try {
+      const migration = await this.migrateUsersToRemnawave.execute();
+      const { sent, failed } = await this.sendMigrationBroadcast(migration.recipients);
+
+      const adminUser = await this.userRepo.findByTelegramId(adminId);
+      if (adminUser) {
+        await this.auditLogRepo.create({
+          userId: adminUser.id,
+          action: 'migrate_remnawave',
+          entityType: 'migration',
+          metadata: {
+            totalUsers: migration.totalUsers,
+            migratedUsers: migration.migratedUsers,
+            failedUsers: migration.failedUsers,
+            skippedUsers: migration.skippedUsers,
+            recipients: migration.recipients.length,
+            sent,
+            sendFailed: failed,
+          },
+        });
+      }
+
+      const text = `✅ Миграция завершена
+
+🎁 Бонус: +5 дней всем пользователям
+
+🚚 Перенос в Remnawave:
+👥 Пользователей в обработке: ${migration.totalUsers}
+✅ Успешно мигрировано: ${migration.migratedUsers}
+⏭ Пропущено: ${migration.skippedUsers}${migration.failedUsers > 0 ? `\n❌ Ошибок миграции: ${migration.failedUsers}` : ''}
+
+📢 Уведомления пользователям:
+📨 Отправлено: ${sent}${failed > 0 ? `\n❌ Ошибок отправки: ${failed}` : ''}`;
+
+      await this.safeEditMessageText(ctx, text, { reply_markup: adminKeyboard() });
+    } catch (err) {
+      getLogger().error({ err }, 'Remnawave migration failed');
+      await this.safeEditMessageText(ctx, '❌ Ошибка миграции в Remnawave', {
+        reply_markup: adminKeyboard(),
+      });
+    }
+  };
+
   private handleAdminBroadcast = async (ctx: Context): Promise<void> => {
     if (!this.isAdmin(ctx)) return;
 
@@ -707,6 +781,27 @@ ${EXPIRED_GIFT_MESSAGE}`;
       } catch (err) {
         failed++;
         getLogger().warn({ err, telegramId }, 'Broadcast send failed');
+      }
+      await sleep(BROADCAST_DELAY_MS);
+    }
+
+    return { sent, failed };
+  }
+
+  private async sendMigrationBroadcast(
+    recipients: Array<{ telegramId: number; subscriptionUrl: string }>,
+  ): Promise<{ sent: number; failed: number }> {
+    let sent = 0;
+    let failed = 0;
+
+    for (const recipient of recipients) {
+      try {
+        const text = MIGRATION_BROADCAST_MESSAGE.replace('{url}', recipient.subscriptionUrl);
+        await this.bot.telegram.sendMessage(recipient.telegramId, text);
+        sent++;
+      } catch (err) {
+        failed++;
+        getLogger().warn({ err, telegramId: recipient.telegramId }, 'Migration broadcast send failed');
       }
       await sleep(BROADCAST_DELAY_MS);
     }

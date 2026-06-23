@@ -57,6 +57,7 @@ export function adminKeyboard(): InlineKeyboardMarkup {
       ],
       [{ text: '📢 Рассылка', callback_data: 'admin_broadcast' }],
       [{ text: '🔄 Синхронизация с БД', callback_data: 'admin_sync' }],
+      [{ text: '🚚 Миграция в Remnawave', callback_data: 'admin_migrate_remnawave' }],
       [{ text: 'Назад', callback_data: 'back_main' }],
     ],
   };
