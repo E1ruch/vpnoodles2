@@ -6,6 +6,7 @@ import { Plan } from '../../domain/entities/Plan.js';
 import { Subscription } from '../../domain/entities/Subscription.js';
 import { Payment } from '../../domain/entities/Payment.js';
 import { AuditLog } from '../../domain/entities/AuditLog.js';
+import { NotificationLog } from '../../domain/entities/NotificationLog.js';
 
 let dataSource: DataSource | null = null;
 
@@ -23,7 +24,7 @@ export async function getDataSource(): Promise<DataSource> {
     database: env.DATABASE_NAME,
     username: env.DATABASE_USER,
     password: env.DATABASE_PASSWORD,
-    entities: [User, Plan, Subscription, Payment, AuditLog],
+    entities: [User, Plan, Subscription, Payment, AuditLog, NotificationLog],
     synchronize: env.NODE_ENV === 'development',
     logging: env.NODE_ENV === 'development',
     migrations: [],

@@ -145,6 +145,30 @@ async function bootstrap(): Promise<void> {
       logger.info('YooKassa polling disabled (YOOKASSA_POLL_INTERVAL_MS=0); use webhook for redirect payments');
     }
 
+    // Уведомления: напоминания «нет подписки» и «окончание trial».
+    if (env.NOTIFICATIONS_ENABLED) {
+      const notifTickMs = env.NOTIFICATIONS_TICK_INTERVAL_MS;
+      const runNotificationsTick = () => {
+        Promise.all([
+          container.sendNoSubscriptionRemindersUseCase
+            .execute()
+            .catch((err) => logger.warn({ err }, 'No-subscription reminders tick failed')),
+          container.sendTrialExpiringRemindersUseCase
+            .execute()
+            .catch((err) => logger.warn({ err }, 'Trial expiring reminders tick failed')),
+          container.sendPaidExpiringRemindersUseCase
+            .execute()
+            .catch((err) => logger.warn({ err }, 'Paid expiring reminders tick failed')),
+        ]).catch(() => undefined);
+      };
+      setInterval(runNotificationsTick, notifTickMs);
+      // Первый прогон — через 15 секунд после старта.
+      setTimeout(runNotificationsTick, 15000);
+      logger.info({ tickMs: notifTickMs }, 'Proactive notifications scheduler enabled');
+    } else {
+      logger.info('Proactive notifications scheduler disabled (NOTIFICATIONS_ENABLED=false)');
+    }
+
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Shutting down...');
       container.bot.stop(signal);

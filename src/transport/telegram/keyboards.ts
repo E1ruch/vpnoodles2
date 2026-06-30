@@ -55,6 +55,7 @@ export function adminKeyboard(): InlineKeyboardMarkup {
         { text: '💰 Платежи', callback_data: 'admin_payments' },
         { text: '🖥 Сервера', callback_data: 'admin_servers' },
       ],
+      [{ text: '🔔 Уведомления', callback_data: 'admin_notifications' }],
       [{ text: '📢 Рассылка', callback_data: 'admin_broadcast' }],
       [{ text: '🔄 Синхронизация с БД', callback_data: 'admin_sync' }],
       [{ text: '🚚 Миграция в Remnawave', callback_data: 'admin_migrate_remnawave' }],
@@ -103,7 +104,7 @@ export function adminMigrateConfirmKeyboard(): InlineKeyboardMarkup {
   };
 }
 
-export type AdminListSection = 'users' | 'logs' | 'subs';
+export type AdminListSection = 'users' | 'logs' | 'subs' | 'notifications';
 
 export function adminPaginatedKeyboard(
   section: AdminListSection,
@@ -214,6 +215,40 @@ export function deleteDeviceConfirmKeyboard(deviceIndex: number): InlineKeyboard
     inline_keyboard: [
       [{ text: '✅ Да, удалить', callback_data: `confirm_del_dev_${deviceIndex}` }],
       [{ text: 'Отмена', callback_data: 'devices' }],
+    ],
+  };
+}
+
+/** Клавиатура для напоминания «нет подписки» — ведёт в выбор тарифа. */
+export function noSubscriptionReminderKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '🆓 Активировать бесплатный тариф', callback_data: 'plan_trial' }],
+      [{ text: '💎 Посмотреть тарифы', callback_data: 'plans' }],
+    ],
+  };
+}
+
+/** Клавиатура для напоминания об окончании trial — кнопка продления на 14 дней. */
+export function trialExpiringReminderKeyboard(subscriptionId: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '🔄 Продлить бесплатно на 14 дней', callback_data: `renew_${subscriptionId}` }],
+      [{ text: '💎 Перейти на платный тариф', callback_data: 'plan_paid' }],
+    ],
+  };
+}
+
+/**
+ * Клавиатура для напоминания об окончании платной подписки.
+ * Платные подписки продлеваются через оплату, поэтому ведём в выбор платных тарифов
+ * (handlePlanPaid → paidPlansKeyboard → buy_<planId> → оплата).
+ */
+export function paidExpiringReminderKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '💎 Продлить подписку', callback_data: 'plan_paid' }],
+      [{ text: '🆓 Перейти на бесплатный тариф', callback_data: 'plan_trial' }],
     ],
   };
 }

@@ -5,12 +5,14 @@ import type {
   ISubscriptionRepository,
   IPaymentRepository,
   IAuditLogRepository,
+  INotificationLogRepository,
 } from '../../../domain/interfaces/repositories.js';
 import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
 import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { RemnawaveNode } from '../../../shared/types/index.js';
+import type { NotificationType } from '../../../domain/entities/NotificationLog.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { AuditLog } from '../../../domain/entities/AuditLog.js';
 import type { Subscription } from '../../../domain/entities/Subscription.js';
@@ -30,6 +32,7 @@ import {
 const ADMIN_USERS_PAGE_SIZE = 10;
 const ADMIN_LOGS_PAGE_SIZE = 6;
 const ADMIN_SUBS_PAGE_SIZE = 6;
+const ADMIN_NOTIFICATIONS_PAGE_SIZE = 8;
 const BROADCAST_GIFT_DAYS = 7;
 const BROADCAST_DELAY_MS = 50;
 
@@ -70,6 +73,13 @@ const ACTION_LABELS: Record<string, string> = {
   migrate_remnawave: '🚚 Миграция в Remnawave',
 };
 
+const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  no_subscription_reminder_1h: '🔔 Нет подписки (1ч)',
+  no_subscription_reminder_3d: '🔔 Нет подписки (3д)',
+  trial_expiring_2d: '⏰ Окончание trial',
+  paid_expiring_2d: '⏰ Окончание платной',
+};
+
 export class AdminHandlers {
   private pendingCustomBroadcast = new Set<number>();
 
@@ -84,6 +94,7 @@ export class AdminHandlers {
     private renewSubscription: RenewSubscriptionUseCase,
     private syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
     private migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
+    private notificationLogRepo: INotificationLogRepository,
   ) {}
 
   register(bot: Telegraf): void {
@@ -107,6 +118,8 @@ export class AdminHandlers {
     bot.action('admin_sync', this.handleAdminSync);
     bot.action('admin_migrate_remnawave', this.handleAdminMigrateRemnawave);
     bot.action('admin_migrate_remnawave_confirm', this.handleAdminMigrateRemnawaveConfirm);
+    bot.action('admin_notifications', this.handleAdminNotifications);
+    bot.action(/^admin_notifications_p(\d+)$/, this.handleAdminNotifications);
   }
 
   private isAdmin(ctx: Context): boolean {
@@ -463,11 +476,77 @@ export class AdminHandlers {
     const replyOptions = { reply_markup: adminKeyboard() };
 
     if (ctx.callbackQuery) {
-      await this.safeEditMessageText(ctx,'🔧 Админ-панель v. 1.7', replyOptions);
+      await this.safeEditMessageText(ctx,'🔧 Админ-панель v. 1.8', replyOptions);
       return;
     }
 
-    await ctx.reply('🔧 Админ-панель v. 1.7', replyOptions);
+    await ctx.reply('🔧 Админ-панель v. 1.8', replyOptions);
+  };
+
+  private formatNotificationTypeLabel(type: NotificationType): string {
+    return NOTIFICATION_TYPE_LABELS[type] ?? type;
+  }
+
+  private handleAdminNotifications = async (ctx: Context): Promise<void> => {
+    if (!this.isAdmin(ctx)) return;
+
+    try {
+      const total = await this.notificationLogRepo.countAll();
+      const totalPages = this.totalPages(total, ADMIN_NOTIFICATIONS_PAGE_SIZE);
+      const page = this.clampPage(this.parsePage(ctx), totalPages);
+
+      const [stats, logs] = await Promise.all([
+        this.notificationLogRepo.getStats(),
+        this.notificationLogRepo.findAll({
+          limit: ADMIN_NOTIFICATIONS_PAGE_SIZE,
+          skip: page * ADMIN_NOTIFICATIONS_PAGE_SIZE,
+          order: { createdAt: 'DESC' },
+        }),
+      ]);
+
+      const userMap = await this.buildUserMap(logs.map((log) => log.userId));
+
+      let text = `🔔 Уведомления\n`;
+      text += `Всего: ${stats.total} · ✅ Доставлено: ${stats.delivered}${stats.failed > 0 ? ` · ❌ Ошибок: ${stats.failed}` : ''}\n`;
+
+      if (stats.byType.length > 0) {
+        text += `\n📊 По типам:\n`;
+        for (const item of stats.byType) {
+          text += `   ${this.formatNotificationTypeLabel(item.type)}: ${item.total}`;
+          if (item.total - item.delivered > 0) {
+            text += ` (✅${item.delivered}/❌${item.total - item.delivered})`;
+          }
+          text += `\n`;
+        }
+      }
+
+      text += `\n📋 Последние · Страница ${page + 1}/${totalPages}\n\n`;
+
+      if (logs.length === 0) {
+        text += 'Уведомлений пока нет.';
+      } else {
+        logs.forEach((log, index) => {
+          const num = page * ADMIN_NOTIFICATIONS_PAGE_SIZE + index + 1;
+          const status = log.delivered ? '✅' : '❌';
+          text += `${num}. ${status} ${this.formatNotificationTypeLabel(log.type)}\n`;
+          text += `   👤 ${this.formatUserLabel(userMap.get(log.userId), log.userId)}\n`;
+          if (log.entityType) {
+            const entity = log.entityId ? `${log.entityType} · ${log.entityId.slice(0, 8)}…` : log.entityType;
+            text += `   📦 ${entity}\n`;
+          }
+          if (!log.delivered && log.errorMessage) {
+            text += `   ⚠️ ${log.errorMessage.slice(0, 80)}\n`;
+          }
+          text += `   🕐 ${formatDate(log.createdAt)}\n\n`;
+        });
+      }
+
+      await this.safeEditMessageText(ctx, text.trimEnd(), {
+        reply_markup: adminPaginatedKeyboard('notifications', page, totalPages),
+      });
+    } catch {
+      await ctx.reply('❌ Ошибка загрузки уведомлений');
+    }
   };
 
   private handleAdminSync = async (ctx: Context): Promise<void> => {

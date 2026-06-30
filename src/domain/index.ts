@@ -3,6 +3,8 @@ export { Plan } from './entities/Plan.js';
 export { Subscription } from './entities/Subscription.js';
 export { Payment } from './entities/Payment.js';
 export { AuditLog } from './entities/AuditLog.js';
+export { NotificationLog } from './entities/NotificationLog.js';
+export type { NotificationType } from './entities/NotificationLog.js';
 
 export type {
   IUserRepository,
@@ -10,6 +12,7 @@ export type {
   ISubscriptionRepository,
   IPaymentRepository,
   IAuditLogRepository,
+  INotificationLogRepository,
 } from './interfaces/repositories.js';
 
 export type {

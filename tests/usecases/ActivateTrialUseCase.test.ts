@@ -23,6 +23,7 @@ const mockSubscriptionRepo = {
   create: jest.fn(),
   update: jest.fn(),
   findExpiringSoon: jest.fn(),
+  findActiveExpiringWithinDays: jest.fn(),
 };
 
 const mockAuditLogRepo = {

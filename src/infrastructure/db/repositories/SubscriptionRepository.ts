@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { getDataSource } from '../connection.js';
 import { Subscription } from '../../../domain/entities/Subscription.js';
 import type { ISubscriptionRepository } from '../../../domain/interfaces/repositories.js';
@@ -62,6 +62,17 @@ export class SubscriptionRepository implements ISubscriptionRepository {
     return repo.find({
       where: { status: 'active', endDate: threshold as unknown as Date },
       relations: ['user'],
+    });
+  }
+
+  async findActiveExpiringWithinDays(days: number): Promise<Subscription[]> {
+    const repo = await this.getRepo();
+    const now = new Date();
+    const threshold = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    return repo.find({
+      where: { status: 'active', endDate: Between(now, threshold) },
+      relations: ['plan', 'user'],
+      order: { endDate: 'ASC' },
     });
   }
 }

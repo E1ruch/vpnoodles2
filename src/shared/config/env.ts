@@ -42,6 +42,28 @@ const envSchema = z.object({
   TRIAL_TRAFFIC_LIMIT_GB: z.coerce.number().default(2),
   TRIAL_TRAFFIC_STRATEGY: z.enum(['NO_RESET', 'DAY', 'MONTH']).default('DAY'),
   SUPPORT_USERNAME: z.string().default('support'),
+
+  // Notifications
+  NOTIFICATIONS_ENABLED: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === null) return true;
+        if (typeof val === 'boolean') return val;
+        return String(val).toLowerCase() === 'true';
+      },
+      z.boolean(),
+    )
+    .default(true),
+  /** Интервал работы планировщика уведомлений (мс). */
+  NOTIFICATIONS_TICK_INTERVAL_MS: z.coerce.number().default(600000),
+  /** Через сколько часов после регистрации отправить первое напоминание «нет подписки». */
+  NOTIFICATION_NO_SUB_FIRST_DELAY_HOURS: z.coerce.number().default(1),
+  /** Через сколько дней после регистрации отправить второе напоминание «нет подписки». */
+  NOTIFICATION_NO_SUB_SECOND_DELAY_DAYS: z.coerce.number().default(3),
+  /** За сколько дней до окончания бесплатного периода слать напоминание о продлении. */
+  NOTIFICATION_TRIAL_EXPIRING_DAYS: z.coerce.number().default(2),
+  /** За сколько дней до окончания платной подписки слать напоминание о продлении. */
+  NOTIFICATION_PAID_EXPIRING_DAYS: z.coerce.number().default(2),
 });
 
 export type Env = z.infer<typeof envSchema>;

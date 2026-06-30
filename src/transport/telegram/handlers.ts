@@ -14,6 +14,7 @@ import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IAuditLogRepository } from '../../domain/interfaces/repositories.js';
+import type { INotificationLogRepository } from '../../domain/interfaces/repositories.js';
 import type {
   IQRCodeService,
   IPaymentService,
@@ -79,6 +80,7 @@ export class BotHandlers {
     remnawaveService: IRemnawaveService,
     syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
     migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
+    notificationLogRepo: INotificationLogRepository,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -107,6 +109,7 @@ export class BotHandlers {
       renewSubscription,
       syncAllFromRemnawave,
       migrateUsersToRemnawave,
+      notificationLogRepo,
     );
   }
 

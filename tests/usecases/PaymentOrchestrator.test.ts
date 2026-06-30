@@ -38,6 +38,7 @@ describe('PaymentOrchestrator', () => {
         amount: 150,
         currency: 'XTR',
         externalPaymentId: null,
+        createdAt: new Date(),
       };
       mockPaymentRepo.findPendingByUserId.mockResolvedValue(existingPayment);
 

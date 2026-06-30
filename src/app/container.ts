@@ -8,12 +8,14 @@ import { PlanRepository } from '../infrastructure/db/repositories/PlanRepository
 import { SubscriptionRepository } from '../infrastructure/db/repositories/SubscriptionRepository.js';
 import { PaymentRepository } from '../infrastructure/db/repositories/PaymentRepository.js';
 import { AuditLogRepository } from '../infrastructure/db/repositories/AuditLogRepository.js';
+import { NotificationLogRepository } from '../infrastructure/db/repositories/NotificationLogRepository.js';
 
 // Services
 import { RemnawaveClient } from '../infrastructure/remnawave/RemnawaveClient.js';
 import { RedisCacheService } from '../infrastructure/cache/RedisCacheService.js';
 import { PaymentOrchestrator } from '../infrastructure/payments/PaymentOrchestrator.js';
 import { QRCodeService } from '../infrastructure/qrcode/QRCodeService.js';
+import { NotificationService } from '../infrastructure/notifications/NotificationService.js';
 
 // Use cases
 import { RegisterUserUseCase } from '../application/usecases/RegisterUserUseCase.js';
@@ -27,6 +29,9 @@ import { GetUserDevicesUseCase } from '../application/usecases/GetUserDevicesUse
 import { DeleteUserDeviceUseCase } from '../application/usecases/DeleteUserDeviceUseCase.js';
 import { SyncAllSubscriptionsFromRemnawaveUseCase } from '../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import { MigrateUsersToRemnawaveUseCase } from '../application/usecases/MigrateUsersToRemnawaveUseCase.js';
+import { SendNoSubscriptionRemindersUseCase } from '../application/usecases/SendNoSubscriptionRemindersUseCase.js';
+import { SendTrialExpiringRemindersUseCase } from '../application/usecases/SendTrialExpiringRemindersUseCase.js';
+import { SendPaidExpiringRemindersUseCase } from '../application/usecases/SendPaidExpiringRemindersUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -38,12 +43,14 @@ export interface AppContainer {
   subscriptionRepo: SubscriptionRepository;
   paymentRepo: PaymentRepository;
   auditLogRepo: AuditLogRepository;
+  notificationLogRepo: NotificationLogRepository;
 
   // Services
   remnawaveService: RemnawaveClient;
   cacheService: RedisCacheService;
   paymentService: PaymentOrchestrator;
   qrCodeService: QRCodeService;
+  notificationService: NotificationService;
 
   // Use cases
   registerUserUseCase: RegisterUserUseCase;
@@ -51,6 +58,9 @@ export interface AppContainer {
   getSubscriptionUseCase: GetSubscriptionUseCase;
   purchasePlanUseCase: PurchasePlanUseCase;
   renewSubscriptionUseCase: RenewSubscriptionUseCase;
+  sendNoSubscriptionRemindersUseCase: SendNoSubscriptionRemindersUseCase;
+  sendTrialExpiringRemindersUseCase: SendTrialExpiringRemindersUseCase;
+  sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
 
   // Bot
   bot: Telegraf;
@@ -70,12 +80,14 @@ export function createContainer(): AppContainer {
   const subscriptionRepo = new SubscriptionRepository();
   const paymentRepo = new PaymentRepository();
   const auditLogRepo = new AuditLogRepository();
+  const notificationLogRepo = new NotificationLogRepository();
 
   // Services
   const remnawaveService = new RemnawaveClient();
   const cacheService = new RedisCacheService();
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
+  const notificationService = new NotificationService(bot, notificationLogRepo);
 
   const syncSubscriptionDevicesUseCase = new SyncSubscriptionDevicesUseCase(
     subscriptionRepo,
@@ -138,6 +150,24 @@ export function createContainer(): AppContainer {
     planRepo,
     remnawaveService,
   );
+  const sendNoSubscriptionRemindersUseCase = new SendNoSubscriptionRemindersUseCase(
+    userRepo,
+    subscriptionRepo,
+    notificationLogRepo,
+    notificationService,
+  );
+  const sendTrialExpiringRemindersUseCase = new SendTrialExpiringRemindersUseCase(
+    subscriptionRepo,
+    notificationLogRepo,
+    notificationService,
+    syncSubscriptionExpiryUseCase,
+  );
+  const sendPaidExpiringRemindersUseCase = new SendPaidExpiringRemindersUseCase(
+    subscriptionRepo,
+    notificationLogRepo,
+    notificationService,
+    syncSubscriptionExpiryUseCase,
+  );
 
   // Handlers
   const handlers = new BotHandlers(
@@ -159,6 +189,7 @@ export function createContainer(): AppContainer {
     remnawaveService,
     syncAllSubscriptionsFromRemnawaveUseCase,
     migrateUsersToRemnawaveUseCase,
+    notificationLogRepo,
   );
 
   logger.info('Container initialized');
@@ -169,15 +200,20 @@ export function createContainer(): AppContainer {
     subscriptionRepo,
     paymentRepo,
     auditLogRepo,
+    notificationLogRepo,
     remnawaveService,
     cacheService,
     paymentService,
     qrCodeService,
+    notificationService,
     registerUserUseCase,
     activateTrialUseCase,
     getSubscriptionUseCase,
     purchasePlanUseCase,
     renewSubscriptionUseCase,
+    sendNoSubscriptionRemindersUseCase,
+    sendTrialExpiringRemindersUseCase,
+    sendPaidExpiringRemindersUseCase,
     bot,
     handlers,
   };

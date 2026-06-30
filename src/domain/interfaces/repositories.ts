@@ -3,6 +3,7 @@ import type { Plan } from '../entities/Plan.js';
 import type { Subscription } from '../entities/Subscription.js';
 import type { Payment } from '../entities/Payment.js';
 import type { AuditLog } from '../entities/AuditLog.js';
+import type { NotificationLog } from '../entities/NotificationLog.js';
 import type {
   SubscriptionStatus,
   PaymentStatus,
@@ -35,6 +36,8 @@ export interface ISubscriptionRepository {
   create(subscription: Partial<Subscription>): Promise<Subscription>;
   update(id: string, data: Partial<Subscription>): Promise<Subscription>;
   findExpiringSoon(hours: number): Promise<Subscription[]>;
+  /** Активные подписки, заканчивающиеся в ближайшие `days` дней (включительно). */
+  findActiveExpiringWithinDays(days: number): Promise<Subscription[]>;
 }
 
 export interface IPaymentRepository {
@@ -64,3 +67,32 @@ export interface IAuditLogRepository {
 export type SubscriptionStatusFilter = SubscriptionStatus;
 export type PaymentStatusFilter = PaymentStatus;
 export type PaymentProviderFilter = PaymentProvider;
+
+export interface INotificationLogRepository {
+  create(log: Partial<NotificationLog>): Promise<NotificationLog>;
+  /** Проверяет, было ли уже отправлено уведомление с заданным ключом дедупликации. */
+  exists(
+    userId: string,
+    type: NotificationLog['type'],
+    options?: { entityId?: string | null; cycleKey?: string | null },
+  ): Promise<boolean>;
+  findByUserAndType(
+    userId: string,
+    type: NotificationLog['type'],
+  ): Promise<NotificationLog[]>;
+  /** Общее количество записей в журнале уведомлений. */
+  countAll(): Promise<number>;
+  /** Список уведомлений с пагинацией (для админ-панели). */
+  findAll(options?: {
+    limit?: number;
+    skip?: number;
+    order?: { [key: string]: 'ASC' | 'DESC' };
+  }): Promise<NotificationLog[]>;
+  /** Агрегированная статистика по типам и статусам доставки. */
+  getStats(): Promise<{
+    total: number;
+    delivered: number;
+    failed: number;
+    byType: Array<{ type: NotificationLog['type']; total: number; delivered: number }>;
+  }>;
+}
