@@ -10,6 +10,7 @@
     "lint": "eslint src/ --ext .ts",
     "test": "jest --verbose",
     "migrate": "tsx src/infrastructure/db/migrate.ts",
+    "migrate:safe": "tsx src/infrastructure/db/migrate-safe.ts",
     "seed": "tsx src/infrastructure/db/seed.ts"
   },
   "keywords": [
