@@ -8,7 +8,7 @@ import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { IPaymentService } from '../../domain/interfaces/services.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { ValidationError, SubscriptionError } from '../../shared/errors/index.js';
+import { ValidationError } from '../../shared/errors/index.js';
 import { daysFromNow } from '../../shared/utils/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import type { PaymentProvider } from '../../shared/types/index.js';
@@ -51,6 +51,7 @@ export class PurchasePlanUseCase {
 
     // Check for existing active subscription
     let existingRemnawaveUserId: string | null = null;
+    let renewalSubscriptionId: string | null = null;
     const existingSub = await this.subscriptionRepo.findActiveByUserId(userId);
     if (existingSub) {
       // Если есть активная подписка - проверяем тип
@@ -65,8 +66,16 @@ export class PurchasePlanUseCase {
         // Деактивируем старую подписку в БД
         await this.subscriptionRepo.update(existingSub.id, { status: 'expired' });
       } else {
-        // Если это платный тариф - нельзя купить ещё один
-        throw new SubscriptionError('User already has active paid subscription');
+        // Платная подписка — продлеваем её, остаток дней переносится
+        const remainingDays = Math.ceil(
+          (existingSub.endDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+        );
+        logger.info(
+          { userId, existingSubId: existingSub.id, remainingDays },
+          'Renewing active paid subscription',
+        );
+        existingRemnawaveUserId = existingSub.remnawaveUserId;
+        renewalSubscriptionId = existingSub.id;
       }
     }
 
@@ -152,7 +161,14 @@ export class PurchasePlanUseCase {
     let remnawaveUserId: string;
 
     if (existingRemnawaveUserId) {
-      await this.remnawaveService.upgradeUser(existingRemnawaveUserId, paidRemnawaveOptions);
+      if (renewalSubscriptionId) {
+        // Продление платной подписки: extendUser переносит оставшиеся дни
+        await this.remnawaveService.extendUser(existingRemnawaveUserId, plan.durationDays);
+        await this.remnawaveService.updateUserTag(existingRemnawaveUserId, tag);
+        await this.remnawaveService.updateDeviceLimit(existingRemnawaveUserId, plan.deviceLimit);
+      } else {
+        await this.remnawaveService.upgradeUser(existingRemnawaveUserId, paidRemnawaveOptions);
+      }
       remnawaveUserId = existingRemnawaveUserId;
     } else {
       remnawaveUserId = await this.remnawaveService.createUser(
@@ -166,31 +182,52 @@ export class PurchasePlanUseCase {
       await this.remnawaveService.upgradeUser(remnawaveUserId, paidRemnawaveOptions);
     }
 
-    const startDate = new Date();
-    const endDate = expireAt;
+    let subscriptionId: string;
+    let subscriptionUrl: string;
 
-    const subscription = await this.subscriptionRepo.create({
-      userId,
-      planId,
-      status: 'active',
-      startDate,
-      endDate,
-      deviceLimit: plan.deviceLimit,
-      remnawaveUserId,
-    });
+    if (renewalSubscriptionId) {
+      // Продление: обновляем существующую подписку, синхронизируем срок из Remnawave
+      const actualExpiry = await this.remnawaveService.getUserExpireAt(remnawaveUserId);
+      const endDate = actualExpiry ?? expireAt;
+
+      await this.subscriptionRepo.update(renewalSubscriptionId, {
+        status: 'active',
+        planId,
+        deviceLimit: plan.deviceLimit,
+        endDate,
+        remnawaveUserId,
+      });
+
+      subscriptionId = renewalSubscriptionId;
+    } else {
+      const startDate = new Date();
+      const endDate = expireAt;
+
+      const subscription = await this.subscriptionRepo.create({
+        userId,
+        planId,
+        status: 'active',
+        startDate,
+        endDate,
+        deviceLimit: plan.deviceLimit,
+        remnawaveUserId,
+      });
+
+      subscriptionId = subscription.id;
+    }
 
     // Get subscription URL
-    const subscriptionUrl = await this.remnawaveService.getSubscriptionUrl(remnawaveUserId);
-    await this.subscriptionRepo.update(subscription.id, { subscriptionUrl });
+    subscriptionUrl = await this.remnawaveService.getSubscriptionUrl(remnawaveUserId);
+    await this.subscriptionRepo.update(subscriptionId, { subscriptionUrl });
 
     // Generate QR code
     const qrCodeBase64 = await this.qrCodeService.generateBase64(subscriptionUrl);
 
     await this.auditLogRepo.create({
       userId,
-      action: 'subscription_purchased',
+      action: renewalSubscriptionId ? 'subscription_renewed' : 'subscription_purchased',
       entityType: 'subscription',
-      entityId: subscription.id,
+      entityId: subscriptionId,
       metadata: { planId, provider, amount, paymentId: paymentResult.paymentId },
     });
 
@@ -202,10 +239,10 @@ export class PurchasePlanUseCase {
       await this.paymentService.markAsCompleted(fulfillmentPaymentId, externalId);
     }
 
-    await this.syncSubscriptionDevices.execute(subscription.id);
+    await this.syncSubscriptionDevices.execute(subscriptionId);
 
-    logger.info({ userId, subscriptionId: subscription.id, planId }, 'Plan purchased');
-    return { subscriptionId: subscription.id, subscriptionUrl, qrCodeBase64 };
+    logger.info({ userId, subscriptionId, planId }, 'Plan purchased');
+    return { subscriptionId, subscriptionUrl, qrCodeBase64 };
   }
 
   private async buildPurchaseResultFromActiveSubscription(
