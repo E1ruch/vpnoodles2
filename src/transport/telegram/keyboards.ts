@@ -17,6 +17,12 @@ export function mainMenuKeyboard(): InlineKeyboardMarkup {
   };
 }
 
+export function restoreAccessKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[{ text: '✅ Восстановить доступ', callback_data: 'restore_access' }]],
+  };
+}
+
 export function planSelectionKeyboard(): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 

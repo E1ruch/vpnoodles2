@@ -5,10 +5,12 @@ import type {
   IAuditLogRepository,
 } from '../../../domain/interfaces/repositories.js';
 import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
+import type { DeactivateBlockedUserUseCase } from '../../../application/usecases/DeactivateBlockedUserUseCase.js';
 import type { User } from '../../../domain/entities/User.js';
 import type { Subscription } from '../../../domain/entities/Subscription.js';
 import { getLogger } from '../../../shared/logger/index.js';
 import { sleep } from '../../../shared/utils/index.js';
+import { isTelegramBlockedError } from '../../../infrastructure/notifications/telegramErrors.js';
 import {
   adminBackKeyboard,
   adminBroadcastCancelKeyboard,
@@ -42,6 +44,7 @@ export class AdminBroadcastHandlers {
     private subscriptionRepo: ISubscriptionRepository,
     private auditLogRepo: IAuditLogRepository,
     private renewSubscription: RenewSubscriptionUseCase,
+    private deactivateBlockedUser: DeactivateBlockedUserUseCase,
     /** Общий с AdminOverviewHandlers Set — открытие меню сбрасывает ожидание текста рассылки. */
     private pendingCustomBroadcast: Set<number>,
   ) {}
@@ -173,6 +176,14 @@ ${EXPIRED_GIFT_MESSAGE}`;
       } catch (err) {
         sendFailed++;
         getLogger().warn({ err, telegramId: user.telegramId }, 'Gift broadcast send failed');
+        if (isTelegramBlockedError(err)) {
+          await this.deactivateBlockedUser.execute(user.id).catch((deactivateErr) => {
+            getLogger().error(
+              { err: deactivateErr, userId: user.id },
+              'Failed to deactivate blocked user',
+            );
+          });
+        }
       }
 
       await sleep(BROADCAST_DELAY_MS);
@@ -212,6 +223,9 @@ ${EXPIRED_GIFT_MESSAGE}`;
     const result: Array<{ user: User; subscription: Subscription }> = [];
 
     for (const user of users) {
+      // Уже известно, что бот заблокирован — не тратим продление на недостижимого.
+      if (user.isActive === false) continue;
+
       const active = await this.subscriptionRepo.findActiveByUserId(user.id);
       if (active && active.endDate > now) continue;
 
@@ -236,10 +250,11 @@ ${EXPIRED_GIFT_MESSAGE}`;
 
     await ctx.reply('⏳ Отправляю рассылку…');
 
-    const users = await this.userRepo.findAll();
-    const telegramIds = users.map((u) => Number(u.telegramId));
+    const allUsers = await this.userRepo.findAll();
+    // Уже известно, что бот заблокирован — не тратим попытку отправки впустую.
+    const recipients = allUsers.filter((u) => u.isActive !== false);
 
-    const { sent, failed } = await this.sendTelegramMessages(telegramIds, text);
+    const { sent, failed } = await this.sendTelegramMessages(recipients, text);
 
     const adminUser = await this.userRepo.findByTelegramId(adminId);
     if (adminUser) {
@@ -247,30 +262,38 @@ ${EXPIRED_GIFT_MESSAGE}`;
         userId: adminUser.id,
         action: 'broadcast_all',
         entityType: 'broadcast',
-        metadata: { recipients: users.length, sent, failed },
+        metadata: { recipients: recipients.length, sent, failed },
       });
     }
 
     await ctx.reply(
-      `✅ Рассылка завершена\n\n👥 Всего: ${users.length}\n📨 Отправлено: ${sent}${failed > 0 ? `\n❌ Ошибок: ${failed}` : ''}`,
+      `✅ Рассылка завершена\n\n👥 Всего: ${recipients.length}\n📨 Отправлено: ${sent}${failed > 0 ? `\n❌ Ошибок: ${failed}` : ''}`,
       { reply_markup: adminBroadcastKeyboard() },
     );
   };
 
   private async sendTelegramMessages(
-    telegramIds: number[],
+    recipients: Array<{ id: string; telegramId: number }>,
     text: string,
   ): Promise<{ sent: number; failed: number }> {
     let sent = 0;
     let failed = 0;
 
-    for (const telegramId of telegramIds) {
+    for (const recipient of recipients) {
       try {
-        await this.bot.telegram.sendMessage(telegramId, text);
+        await this.bot.telegram.sendMessage(recipient.telegramId, text);
         sent++;
       } catch (err) {
         failed++;
-        getLogger().warn({ err, telegramId }, 'Broadcast send failed');
+        getLogger().warn({ err, telegramId: recipient.telegramId }, 'Broadcast send failed');
+        if (isTelegramBlockedError(err)) {
+          await this.deactivateBlockedUser.execute(recipient.id).catch((deactivateErr) => {
+            getLogger().error(
+              { err: deactivateErr, userId: recipient.id },
+              'Failed to deactivate blocked user',
+            );
+          });
+        }
       }
       await sleep(BROADCAST_DELAY_MS);
     }

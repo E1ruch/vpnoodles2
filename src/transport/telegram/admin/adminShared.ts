@@ -23,6 +23,8 @@ export const ACTION_LABELS: Record<string, string> = {
   broadcast_expired_gift: '🎁 Подарок истёкшим',
   sync_remnawave: '🔄 Синхронизация Remnawave',
   migrate_remnawave: '🚚 Миграция в Remnawave',
+  user_blocked_bot: '🚫 Заблокировал бота',
+  user_restored_access: '✅ Восстановил доступ',
 };
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {

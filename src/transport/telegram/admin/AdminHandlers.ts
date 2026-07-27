@@ -11,6 +11,7 @@ import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
 import type { RenewSubscriptionUseCase } from '../../../application/usecases/RenewSubscriptionUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
+import type { DeactivateBlockedUserUseCase } from '../../../application/usecases/DeactivateBlockedUserUseCase.js';
 import { AdminOverviewHandlers } from './AdminOverviewHandlers.js';
 import { AdminListHandlers } from './AdminListHandlers.js';
 import { AdminMigrationHandlers } from './AdminMigrationHandlers.js';
@@ -22,8 +23,7 @@ import { AdminBroadcastHandlers } from './AdminBroadcastHandlers.js';
  * классе — файл разросся до ~920 строк. Разбит на модули по доменным группам
  * (тот же паттерн, что уже применялся к handlers.ts → user/*Handlers): общая
  * инфраструктура (isAdmin, safeEditMessageText, пагинация, форматирование) —
- * в adminShared.ts, остальное — по группам. Публичный конструктор и register()
- * не менялись — вызывающий код (handlers.ts) трогать не пришлось.
+ * в adminShared.ts, остальное — по группам.
  */
 export class AdminHandlers {
   private overviewHandlers: AdminOverviewHandlers;
@@ -43,6 +43,7 @@ export class AdminHandlers {
     syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
     migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
     notificationLogRepo: INotificationLogRepository,
+    deactivateBlockedUser: DeactivateBlockedUserUseCase,
   ) {
     // Общий Set: открытие главного меню (AdminOverviewHandlers) сбрасывает
     // ожидание текста рассылки (AdminBroadcastHandlers), поэтому оба класса
@@ -73,6 +74,7 @@ export class AdminHandlers {
       auditLogRepo,
       syncAllFromRemnawave,
       migrateUsersToRemnawave,
+      deactivateBlockedUser,
     );
 
     this.broadcastHandlers = new AdminBroadcastHandlers(
@@ -81,6 +83,7 @@ export class AdminHandlers {
       subscriptionRepo,
       auditLogRepo,
       renewSubscription,
+      deactivateBlockedUser,
       pendingCustomBroadcast,
     );
   }

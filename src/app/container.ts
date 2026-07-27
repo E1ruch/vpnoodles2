@@ -32,6 +32,8 @@ import { MigrateUsersToRemnawaveUseCase } from '../application/usecases/MigrateU
 import { SendNoSubscriptionRemindersUseCase } from '../application/usecases/SendNoSubscriptionRemindersUseCase.js';
 import { SendTrialExpiringRemindersUseCase } from '../application/usecases/SendTrialExpiringRemindersUseCase.js';
 import { SendPaidExpiringRemindersUseCase } from '../application/usecases/SendPaidExpiringRemindersUseCase.js';
+import { DeactivateBlockedUserUseCase } from '../application/usecases/DeactivateBlockedUserUseCase.js';
+import { RestoreBlockedUserUseCase } from '../application/usecases/RestoreBlockedUserUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -87,7 +89,25 @@ export function createContainer(): AppContainer {
   const remnawaveService = new RemnawaveClient(cacheService);
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
-  const notificationService = new NotificationService(bot, notificationLogRepo);
+
+  const deactivateBlockedUserUseCase = new DeactivateBlockedUserUseCase(
+    userRepo,
+    subscriptionRepo,
+    auditLogRepo,
+    remnawaveService,
+  );
+  const restoreBlockedUserUseCase = new RestoreBlockedUserUseCase(
+    userRepo,
+    subscriptionRepo,
+    auditLogRepo,
+    remnawaveService,
+  );
+
+  const notificationService = new NotificationService(
+    bot,
+    notificationLogRepo,
+    deactivateBlockedUserUseCase,
+  );
 
   const syncSubscriptionDevicesUseCase = new SyncSubscriptionDevicesUseCase(
     subscriptionRepo,
@@ -190,6 +210,8 @@ export function createContainer(): AppContainer {
     syncAllSubscriptionsFromRemnawaveUseCase,
     migrateUsersToRemnawaveUseCase,
     notificationLogRepo,
+    deactivateBlockedUserUseCase,
+    restoreBlockedUserUseCase,
   );
 
   logger.info('Container initialized');

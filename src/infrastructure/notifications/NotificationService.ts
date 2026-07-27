@@ -2,7 +2,9 @@ import type { Telegraf } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/types';
 import type { INotificationLogRepository } from '../../domain/interfaces/repositories.js';
 import type { NotificationType } from '../../domain/entities/NotificationLog.js';
+import type { DeactivateBlockedUserUseCase } from '../../application/usecases/DeactivateBlockedUserUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
+import { isTelegramBlockedError } from './telegramErrors.js';
 
 export interface SendNotificationInput {
   userId: string;
@@ -26,6 +28,7 @@ export class NotificationService {
   constructor(
     private bot: Telegraf,
     private notificationLogRepo: INotificationLogRepository,
+    private deactivateBlockedUser: DeactivateBlockedUserUseCase,
   ) {}
 
   async send(input: SendNotificationInput): Promise<boolean> {
@@ -44,6 +47,15 @@ export class NotificationService {
         { err, telegramId: input.telegramId, type: input.type },
         'Notification send failed',
       );
+
+      if (isTelegramBlockedError(err)) {
+        await this.deactivateBlockedUser.execute(input.userId).catch((deactivateErr) => {
+          logger.error(
+            { err: deactivateErr, userId: input.userId },
+            'Failed to deactivate blocked user',
+          );
+        });
+      }
     }
 
     try {

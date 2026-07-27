@@ -8,6 +8,8 @@ import type { GetUserDevicesUseCase } from '../../application/usecases/GetUserDe
 import type { DeleteUserDeviceUseCase } from '../../application/usecases/DeleteUserDeviceUseCase.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import type { MigrateUsersToRemnawaveUseCase } from '../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
+import type { DeactivateBlockedUserUseCase } from '../../application/usecases/DeactivateBlockedUserUseCase.js';
+import type { RestoreBlockedUserUseCase } from '../../application/usecases/RestoreBlockedUserUseCase.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
@@ -23,7 +25,13 @@ import { getLogger } from '../../shared/logger/index.js';
 import { formatDate } from '../../shared/utils/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import { Texts } from './texts.js';
-import { mainMenuKeyboard, planSelectionKeyboard, backToMainKeyboard, profileKeyboard } from './keyboards.js';
+import {
+  mainMenuKeyboard,
+  planSelectionKeyboard,
+  backToMainKeyboard,
+  profileKeyboard,
+  restoreAccessKeyboard,
+} from './keyboards.js';
 import { AdminHandlers } from './admin/AdminHandlers.js';
 import { DeviceHandlers } from './user/DeviceHandlers.js';
 import { PaymentHandlers } from './user/PaymentHandlers.js';
@@ -34,14 +42,14 @@ import { SubscriptionHandlers } from './user/SubscriptionHandlers.js';
  * устройства) жили в этом одном классе — файл разросся до ~1150 строк. Разбит
  * на модули по доменным группам (тот же паттерн, что уже применялся к
  * AdminHandlers): DeviceHandlers, PaymentHandlers, SubscriptionHandlers.
- * Здесь остаётся только базовая навигация (start/back/profile/support) и
- * регистрация всех групп обработчиков. Публичный конструктор и register()
- * не менялись — container.ts трогать не пришлось.
+ * Здесь остаётся только базовая навигация (start/back/profile/support/restore) и
+ * регистрация всех групп обработчиков.
  */
 export class BotHandlers {
   private bot: Telegraf;
   private registerUser: RegisterUserUseCase;
   private getSubscription: GetSubscriptionUseCase;
+  private restoreBlockedUser: RestoreBlockedUserUseCase;
   private userRepo: IUserRepository;
   private adminHandlers: AdminHandlers;
   private deviceHandlers: DeviceHandlers;
@@ -68,10 +76,13 @@ export class BotHandlers {
     syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
     migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
     notificationLogRepo: INotificationLogRepository,
+    deactivateBlockedUser: DeactivateBlockedUserUseCase,
+    restoreBlockedUser: RestoreBlockedUserUseCase,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
     this.getSubscription = getSubscription;
+    this.restoreBlockedUser = restoreBlockedUser;
     this.userRepo = userRepo;
 
     this.deviceHandlers = new DeviceHandlers(userRepo, getUserDevices, deleteUserDevice);
@@ -109,6 +120,7 @@ export class BotHandlers {
       syncAllFromRemnawave,
       migrateUsersToRemnawave,
       notificationLogRepo,
+      deactivateBlockedUser,
     );
   }
 
@@ -117,6 +129,7 @@ export class BotHandlers {
     this.bot.action('back_main', this.handleBackMain);
     this.bot.action('profile', this.handleProfile);
     this.bot.action('support', this.handleSupport);
+    this.bot.action('restore_access', this.handleRestoreAccess);
 
     this.deviceHandlers.register(this.bot);
     this.paymentHandlers.register(this.bot);
@@ -144,9 +157,21 @@ export class BotHandlers {
 
       const user = await this.userRepo.findById(userId);
 
-      const sub = await this.getSubscription.execute(userId);
-
       const firstName = user?.firstName ?? telegramUser.first_name ?? 'Пользователь';
+
+      // Пользователь ранее заблокировал бота (детект — 403 при отправке напоминания/
+      // рассылки, см. DeactivateBlockedUserUseCase) и теперь снова его запустил —
+      // значит бот больше не заблокирован. Не восстанавливаем доступ молча: ждём
+      // явного подтверждения кнопкой, чтобы у пользователя не создавалось ощущение,
+      // будто ничего не произошло.
+      if (user?.isActive === false) {
+        await ctx.reply(Texts.RESTORE_ACCESS_PROMPT.replace('{firstName}', firstName), {
+          reply_markup: restoreAccessKeyboard(),
+        });
+        return;
+      }
+
+      const sub = await this.getSubscription.execute(userId);
 
       if (sub) {
         const welcomeText = Texts.WELCOME_BACK_NAME.replace('{firstName}', firstName);
@@ -157,6 +182,27 @@ export class BotHandlers {
       }
     } catch (err) {
       logger.error({ err }, 'Error in /start handler');
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleRestoreAccess = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      await this.restoreBlockedUser.execute(user.id);
+
+      const firstName = user.firstName ?? telegramUser.first_name ?? 'Пользователь';
+      await ctx.editMessageText(Texts.RESTORE_ACCESS_SUCCESS.replace('{firstName}', firstName), {
+        reply_markup: mainMenuKeyboard(),
+      });
+    } catch (err) {
+      logger.error({ err }, 'Error restoring access');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };

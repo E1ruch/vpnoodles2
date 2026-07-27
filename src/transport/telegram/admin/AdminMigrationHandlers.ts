@@ -6,8 +6,10 @@ import type {
 } from '../../../domain/interfaces/repositories.js';
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
+import type { DeactivateBlockedUserUseCase } from '../../../application/usecases/DeactivateBlockedUserUseCase.js';
 import { getLogger } from '../../../shared/logger/index.js';
 import { sleep } from '../../../shared/utils/index.js';
+import { isTelegramBlockedError } from '../../../infrastructure/notifications/telegramErrors.js';
 import { adminBackKeyboard, adminKeyboard, adminMigrateConfirmKeyboard } from '../keyboards.js';
 import { isAdmin, safeEditMessageText, BROADCAST_DELAY_MS } from './adminShared.js';
 
@@ -39,6 +41,7 @@ export class AdminMigrationHandlers {
     private auditLogRepo: IAuditLogRepository,
     private syncAllFromRemnawave: SyncAllSubscriptionsFromRemnawaveUseCase,
     private migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
+    private deactivateBlockedUser: DeactivateBlockedUserUseCase,
   ) {}
 
   register(bot: Telegraf): void {
@@ -173,7 +176,7 @@ export class AdminMigrationHandlers {
   };
 
   private async sendMigrationBroadcast(
-    recipients: Array<{ telegramId: number; subscriptionUrl: string }>,
+    recipients: Array<{ userId: string; telegramId: number; subscriptionUrl: string }>,
   ): Promise<{ sent: number; failed: number }> {
     let sent = 0;
     let failed = 0;
@@ -186,6 +189,14 @@ export class AdminMigrationHandlers {
       } catch (err) {
         failed++;
         getLogger().warn({ err, telegramId: recipient.telegramId }, 'Migration broadcast send failed');
+        if (isTelegramBlockedError(err)) {
+          await this.deactivateBlockedUser.execute(recipient.userId).catch((deactivateErr) => {
+            getLogger().error(
+              { err: deactivateErr, userId: recipient.userId },
+              'Failed to deactivate blocked user',
+            );
+          });
+        }
       }
       await sleep(BROADCAST_DELAY_MS);
     }
