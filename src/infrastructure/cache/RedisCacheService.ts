@@ -49,6 +49,18 @@ export class RedisCacheService implements ICacheService {
     return result === 1;
   }
 
+  async acquireLock(key: string, ttlSeconds: number): Promise<boolean> {
+    // SET key val EX ttl NX — атомарная операция на стороне Redis: либо мы ставим
+    // ключ и получаем 'OK', либо ключ уже есть и мы получаем null. Раздельные
+    // exists() + set() дают окно гонки между проверкой и записью — здесь его нет.
+    const result = await this.client.set(key, '1', 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
+  }
+
+  async releaseLock(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+
   async disconnect(): Promise<void> {
     await this.client.quit();
   }

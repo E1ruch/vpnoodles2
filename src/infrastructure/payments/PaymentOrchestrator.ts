@@ -9,6 +9,10 @@ import type { Payment } from '../../domain/entities/Payment.js';
 import type { ICacheService } from '../../domain/interfaces/services.js';
 
 const PAYMENT_LOCK_TTL = 300; // 5 minutes
+// Фулфилмент платежа может делать несколько последовательных вызовов Remnawave API,
+// каждый с retry (до 3 попыток с backoff внутри RemnawaveClient) — берём TTL с запасом,
+// чтобы лок не истёк раньше, чем реально закончится обработка при деградации панели.
+const FULFILLMENT_LOCK_TTL = 180; // 3 minutes
 
 export class PaymentOrchestrator implements IPaymentService {
   private paymentRepo: IPaymentRepository;
@@ -55,13 +59,15 @@ export class PaymentOrchestrator implements IPaymentService {
       }
     }
 
-    // Distributed lock to prevent double activation
+    // Distributed lock to prevent double activation.
+    // Раньше здесь была связка exists() + set() — между проверкой и записью есть окно,
+    // в которое могли одновременно проскочить два запроса и оба поставить лок.
+    // acquireLock() делает это одной атомарной Redis-командой (SET NX EX).
     const lockKey = `payment_lock:${userId}:${planId}`;
-    const existingLock = await this.cache.exists(lockKey);
-    if (existingLock) {
+    const lockAcquired = await this.cache.acquireLock(lockKey, PAYMENT_LOCK_TTL);
+    if (!lockAcquired) {
       throw new PaymentError('Payment already being processed');
     }
-    await this.cache.set(lockKey, '1', PAYMENT_LOCK_TTL);
 
     try {
       const paymentId = generateId();
@@ -84,7 +90,7 @@ export class PaymentOrchestrator implements IPaymentService {
         status: payment.status,
       };
     } finally {
-      await this.cache.delete(lockKey);
+      await this.cache.releaseLock(lockKey);
     }
   }
 
@@ -174,5 +180,13 @@ export class PaymentOrchestrator implements IPaymentService {
 
     logger.info({ paymentId }, 'Payment marked as completed');
     return updated;
+  }
+
+  async acquireFulfillmentLock(paymentId: string): Promise<boolean> {
+    return this.cache.acquireLock(`payment_fulfill_lock:${paymentId}`, FULFILLMENT_LOCK_TTL);
+  }
+
+  async releaseFulfillmentLock(paymentId: string): Promise<void> {
+    await this.cache.releaseLock(`payment_fulfill_lock:${paymentId}`);
   }
 }

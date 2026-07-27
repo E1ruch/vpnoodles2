@@ -7,6 +7,7 @@ import { getLogger } from '../shared/logger/index.js';
 import { getEnv } from '../shared/config/env.js';
 import { YooKassaService } from '../infrastructure/payments/YooKassaService.js';
 import { runYooKassaFulfillmentTick } from '../infrastructure/payments/yooKassaFulfillment.js';
+import { PaymentLockedError } from '../shared/errors/index.js';
 
 async function bootstrap(): Promise<void> {
   const logger = getLogger();
@@ -87,6 +88,15 @@ async function bootstrap(): Promise<void> {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok' }));
           } catch (error) {
+            if (error instanceof PaymentLockedError) {
+              // Этот платёж прямо сейчас фулфилится polling-тиком (или другим webhook-
+              // запросом) — это штатная защита от гонки, а не сбой. Отвечаем 200, чтобы
+              // YooKassa не начала ретраить webhook — тик и так доведёт платёж до конца.
+              logger.info({ paymentId: error.paymentId }, 'YooKassa webhook: payment fulfillment locked elsewhere, skip');
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'ok' }));
+              return;
+            }
             logger.error({ error }, 'Error processing YooKassa webhook');
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Internal server error' }));

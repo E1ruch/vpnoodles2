@@ -1,4 +1,4 @@
-import type { IRemnawaveService } from '../../domain/interfaces/services.js';
+import type { IRemnawaveService, ICacheService } from '../../domain/interfaces/services.js';
 import type { HwidDevice, HwidDevicesResult, RemnawaveNode } from '../../shared/types/index.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { RemnawaveError } from '../../shared/errors/index.js';
@@ -101,12 +101,14 @@ export class RemnawaveClient implements IRemnawaveService {
   private baseUrl: string;
   private apiKey: string;
   private timeoutMs: number;
+  private stateCacheTtlSeconds: number;
 
-  constructor() {
+  constructor(private cache: ICacheService) {
     const env = getEnv();
     this.baseUrl = env.REMNAWAVE_API_URL.replace(/\/$/, '');
     this.apiKey = env.REMNAWAVE_API_KEY;
     this.timeoutMs = env.REMNAWAVE_TIMEOUT_MS;
+    this.stateCacheTtlSeconds = env.REMNAWAVE_STATE_CACHE_TTL_SECONDS;
   }
 
   async findUserByUsername(username: string): Promise<string | null> {
@@ -198,64 +200,26 @@ export class RemnawaveClient implements IRemnawaveService {
       await this.request<void>('DELETE', `/api/users/${remnawaveUserId}`);
       logger.info({ remnawaveUserId }, 'Remnawave user deleted');
     });
+    await this.invalidateStateCache(remnawaveUserId);
   }
 
   async suspendUser(remnawaveUserId: string): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId }, 'Suspending Remnawave user');
-
-    await this.withRetry(async () => {
-      const currentUser = await this.getUser(remnawaveUserId);
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        status: 'DISABLED',
-        trafficLimitBytes: currentUser.trafficLimitBytes,
-        trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt: currentUser.expireAt,
-        description: currentUser.description,
-        tag: currentUser.tag,
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        hwidDeviceLimit: currentUser.hwidDeviceLimit,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info({ remnawaveUserId }, 'Remnawave user suspended');
-    });
+    await this.patchUser(remnawaveUserId, () => ({ status: 'DISABLED' }));
+    logger.info({ remnawaveUserId }, 'Remnawave user suspended');
   }
 
   async resumeUser(remnawaveUserId: string): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId }, 'Resuming Remnawave user');
-
-    await this.withRetry(async () => {
-      const currentUser = await this.getUser(remnawaveUserId);
+    await this.patchUser(remnawaveUserId, (currentUser) => {
       const currentExpiry = new Date(currentUser.expireAt);
       const expireAt =
-        currentExpiry.getTime() > Date.now()
-          ? currentUser.expireAt
-          : new Date().toISOString();
-
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        status: 'ACTIVE',
-        trafficLimitBytes: currentUser.trafficLimitBytes,
-        trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt,
-        description: currentUser.description,
-        tag: currentUser.tag,
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        hwidDeviceLimit: currentUser.hwidDeviceLimit,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info({ remnawaveUserId }, 'Remnawave user resumed');
+        currentExpiry.getTime() > Date.now() ? currentUser.expireAt : new Date().toISOString();
+      return { status: 'ACTIVE', expireAt };
     });
+    logger.info({ remnawaveUserId }, 'Remnawave user resumed');
   }
 
   async getSubscriptionUrl(remnawaveUserId: string): Promise<string> {
@@ -284,93 +248,32 @@ export class RemnawaveClient implements IRemnawaveService {
   async updateDeviceLimit(remnawaveUserId: string, limit: number): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId, limit }, 'Updating device limit');
-
-    await this.withRetry(async () => {
-      const currentUser = await this.getUser(remnawaveUserId);
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        status: currentUser.status,
-        trafficLimitBytes: currentUser.trafficLimitBytes,
-        trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt: currentUser.expireAt,
-        description: currentUser.description,
-        tag: currentUser.tag,
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        hwidDeviceLimit: limit,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info({ remnawaveUserId, limit }, 'Device limit updated');
-    });
+    await this.patchUser(remnawaveUserId, () => ({ hwidDeviceLimit: limit }));
+    logger.info({ remnawaveUserId, limit }, 'Device limit updated');
   }
 
   async updateUserTag(remnawaveUserId: string, tag: string): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId, tag }, 'Updating user tag');
-
-    await this.withRetry(async () => {
-      const currentUser = await this.getUser(remnawaveUserId);
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        status: currentUser.status,
-        trafficLimitBytes: currentUser.trafficLimitBytes,
-        trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt: currentUser.expireAt,
-        description: currentUser.description,
-        tag,
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        hwidDeviceLimit: currentUser.hwidDeviceLimit,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info({ remnawaveUserId, tag }, 'User tag updated');
-    });
+    await this.patchUser(remnawaveUserId, () => ({ tag }));
+    logger.info({ remnawaveUserId, tag }, 'User tag updated');
   }
 
   async extendUser(remnawaveUserId: string, days: number): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId, days }, 'Extending user subscription');
 
-    await this.withRetry(async () => {
-      // First get current user to read expireAt
-      const raw = await this.request<RemnawaveApiResponse<RemnawaveUser>>(
-        'GET',
-        `/api/users/${remnawaveUserId}`,
-      );
-      const currentUser = raw.response;
-
+    let newExpiryIso = '';
+    await this.patchUser(remnawaveUserId, (currentUser) => {
       const currentExpiry = new Date(currentUser.expireAt);
       const newExpiry = new Date(
         Math.max(currentExpiry.getTime(), Date.now()) + days * 24 * 60 * 60 * 1000,
       );
-
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        status: 'ACTIVE',
-        trafficLimitBytes: currentUser.trafficLimitBytes,
-        trafficLimitStrategy: currentUser.trafficLimitStrategy,
-        expireAt: newExpiry.toISOString(),
-        description: currentUser.description,
-        tag: currentUser.tag,
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        hwidDeviceLimit: currentUser.hwidDeviceLimit,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info(
-        { remnawaveUserId, days, newExpiry: newExpiry.toISOString() },
-        'User subscription extended',
-      );
+      newExpiryIso = newExpiry.toISOString();
+      return { status: 'ACTIVE', expireAt: newExpiryIso };
     });
+
+    logger.info({ remnawaveUserId, days, newExpiry: newExpiryIso }, 'User subscription extended');
   }
 
   async upgradeUser(
@@ -385,35 +288,38 @@ export class RemnawaveClient implements IRemnawaveService {
   ): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId, options }, 'Upgrading user to paid plan');
-
-    await this.withRetry(async () => {
-      // Сначала получаем текущего пользователя для получения username
-      const currentUser = await this.getUser(remnawaveUserId);
-
-      const payload: RemnawaveUpdateUserPayload = {
-        uuid: remnawaveUserId,
-        username: currentUser.username,
-        tag: options.tag,
-        hwidDeviceLimit: options.deviceLimit,
-        trafficLimitBytes: options.trafficLimitBytes,
-        trafficLimitStrategy: options.trafficLimitStrategy,
-        expireAt: options.expireAt.toISOString(),
-        status: 'ACTIVE',
-        telegramId: currentUser.telegramId,
-        email: currentUser.email,
-        description: currentUser.description,
-        activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
-        externalSquadUuid: currentUser.externalSquadUuid,
-      };
-      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
-      logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
-    });
+    await this.patchUser(remnawaveUserId, () => ({
+      tag: options.tag,
+      hwidDeviceLimit: options.deviceLimit,
+      trafficLimitBytes: options.trafficLimitBytes,
+      trafficLimitStrategy: options.trafficLimitStrategy,
+      expireAt: options.expireAt.toISOString(),
+      status: 'ACTIVE',
+    }));
+    logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
   }
 
+  /**
+   * Читается на каждый показ "Мой VPN", в напоминаниях об окончании подписки и в
+   * синхронизации с Remnawave — самый горячий путь чтения панели. Кэшируем в Redis на
+   * REMNAWAVE_STATE_CACHE_TTL_SECONDS (по умолчанию 10с): для меню пользователю не
+   * важна секундная точность, а нагрузка на панель падает пропорционально числу тех,
+   * кто открыл "Мой VPN" в одно и то же окно. Кэш — только для чтения: patchUser()
+   * и deleteUser() инвалидируют запись сразу после успешной мутации, поэтому "прочитать
+   * своё же изменение" всегда возвращает свежие данные, а не устаревший кэш.
+   */
   async getUserSubscriptionState(
     remnawaveUserUuid: string,
   ): Promise<{ expireAt: Date; status: 'active' | 'expired' } | null> {
     const logger = getLogger();
+    const cacheKey = this.stateCacheKey(remnawaveUserUuid);
+
+    if (this.stateCacheTtlSeconds > 0) {
+      const cached = await this.cache.get<{ expireAt: string; status: 'active' | 'expired' }>(cacheKey);
+      if (cached) {
+        return { expireAt: new Date(cached.expireAt), status: cached.status };
+      }
+    }
 
     try {
       const user = await this.getUser(remnawaveUserUuid);
@@ -425,6 +331,15 @@ export class RemnawaveClient implements IRemnawaveService {
 
       const now = new Date();
       const status = user.status === 'ACTIVE' && expireAt > now ? 'active' : 'expired';
+
+      if (this.stateCacheTtlSeconds > 0) {
+        await this.cache.set(
+          cacheKey,
+          { expireAt: expireAt.toISOString(), status },
+          this.stateCacheTtlSeconds,
+        );
+      }
+
       return { expireAt, status };
     } catch (error) {
       if (error instanceof RemnawaveError && error.message.includes('404')) {
@@ -531,6 +446,64 @@ export class RemnawaveClient implements IRemnawaveService {
       `/api/users/${remnawaveUserId}`,
     );
     return raw.response;
+  }
+
+  /**
+   * GET текущего пользователя → полный payload со всеми полями (Remnawave PATCH
+   * ожидает объект целиком, частичный patch не поддерживает) → PATCH с точечными
+   * переопределениями из buildOverrides. Раньше этот GET-модификация-PATCH паттерн
+   * был скопирован почти дословно в suspendUser/resumeUser/updateDeviceLimit/
+   * updateUserTag/extendUser/upgradeUser — при изменении набора полей API пришлось
+   * бы править в шести местах и легко было бы забыть одно. Теперь одно место.
+   */
+  private async patchUser(
+    remnawaveUserId: string,
+    buildOverrides: (currentUser: RemnawaveUser) => Partial<RemnawaveUpdateUserPayload>,
+  ): Promise<void> {
+    await this.withRetry(async () => {
+      const currentUser = await this.getUser(remnawaveUserId);
+      const payload = this.buildFullUpdatePayload(
+        remnawaveUserId,
+        currentUser,
+        buildOverrides(currentUser),
+      );
+      await this.request<RemnawaveUser>('PATCH', '/api/users', payload);
+    });
+    // status/expireAt только что могли измениться — не даём следующему читателю
+    // получить устаревший закэшированный getUserSubscriptionState().
+    await this.invalidateStateCache(remnawaveUserId);
+  }
+
+  private stateCacheKey(remnawaveUserId: string): string {
+    return `remnawave:state:${remnawaveUserId}`;
+  }
+
+  private async invalidateStateCache(remnawaveUserId: string): Promise<void> {
+    if (this.stateCacheTtlSeconds <= 0) return;
+    await this.cache.delete(this.stateCacheKey(remnawaveUserId));
+  }
+
+  private buildFullUpdatePayload(
+    remnawaveUserId: string,
+    currentUser: RemnawaveUser,
+    overrides: Partial<RemnawaveUpdateUserPayload>,
+  ): RemnawaveUpdateUserPayload {
+    return {
+      uuid: remnawaveUserId,
+      username: currentUser.username,
+      status: currentUser.status,
+      trafficLimitBytes: currentUser.trafficLimitBytes,
+      trafficLimitStrategy: currentUser.trafficLimitStrategy,
+      expireAt: currentUser.expireAt,
+      description: currentUser.description,
+      tag: currentUser.tag,
+      telegramId: currentUser.telegramId,
+      email: currentUser.email,
+      hwidDeviceLimit: currentUser.hwidDeviceLimit,
+      activeInternalSquads: this.normalizeInternalSquads(currentUser.activeInternalSquads),
+      externalSquadUuid: currentUser.externalSquadUuid,
+      ...overrides,
+    };
   }
 
   private normalizeInternalSquads(

@@ -38,6 +38,11 @@ export interface ISubscriptionRepository {
   findExpiringSoon(hours: number): Promise<Subscription[]>;
   /** Активные подписки, заканчивающиеся в ближайшие `days` дней (включительно). */
   findActiveExpiringWithinDays(days: number): Promise<Subscription[]>;
+  /**
+   * Из переданных userId возвращает те, у кого есть хотя бы одна подписка (любого статуса).
+   * Один запрос вместо findByUserId() на каждого пользователя по отдельности.
+   */
+  findUserIdsWithSubscriptions(userIds: string[]): Promise<Set<string>>;
 }
 
 export interface IPaymentRepository {

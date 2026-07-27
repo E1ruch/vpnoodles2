@@ -75,4 +75,15 @@ export class SubscriptionRepository implements ISubscriptionRepository {
       order: { endDate: 'ASC' },
     });
   }
+
+  async findUserIdsWithSubscriptions(userIds: string[]): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const repo = await this.getRepo();
+    const rows = await repo
+      .createQueryBuilder('s')
+      .select('DISTINCT s.userId', 'userId')
+      .where('s.userId IN (:...userIds)', { userIds })
+      .getRawMany<{ userId: string }>();
+    return new Set(rows.map((row) => row.userId));
+  }
 }

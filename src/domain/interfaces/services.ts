@@ -68,6 +68,17 @@ export interface IPaymentService {
     paymentId: string,
     externalId: string,
   ): Promise<import('../entities/Payment.js').Payment>;
+  /**
+   * Лок на "фулфилмент" конкретного платежа — выдачу/продление подписки в Remnawave.
+   * Нужен потому, что один и тот же платёж может дойти до PurchasePlanUseCase двумя
+   * путями одновременно: через YooKassa webhook и через polling-тик
+   * (runYooKassaFulfillmentTick), либо через два перекрывшихся по времени polling-тика.
+   * Без лока оба вызова видят status='pending' и оба продлевают подписку в Remnawave —
+   * а extendUser() не идемпотентен (просто прибавляет дни), так что пользователь
+   * получает задвоенный срок. TTL лока должен покрывать retry-цепочки Remnawave-клиента.
+   */
+  acquireFulfillmentLock(paymentId: string): Promise<boolean>;
+  releaseFulfillmentLock(paymentId: string): Promise<void>;
 }
 
 export interface ICacheService {
@@ -75,6 +86,13 @@ export interface ICacheService {
   set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
+  /**
+   * Атомарный distributed-лок (Redis SET NX EX). В отличие от связки exists()+set(),
+   * не имеет окна между проверкой и записью — при гонке лок получит ровно один вызывающий.
+   * Возвращает true, если лок захвачен именно этим вызовом.
+   */
+  acquireLock(key: string, ttlSeconds: number): Promise<boolean>;
+  releaseLock(key: string): Promise<void>;
 }
 
 export interface IQRCodeService {

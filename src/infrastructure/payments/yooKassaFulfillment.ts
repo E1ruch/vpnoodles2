@@ -5,7 +5,7 @@ import type { IPaymentRepository } from '../../domain/interfaces/repositories.js
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { SubscriptionError } from '../../shared/errors/index.js';
+import { SubscriptionError, PaymentLockedError } from '../../shared/errors/index.js';
 import { YooKassaService } from './YooKassaService.js';
 import { Texts } from '../../transport/telegram/texts.js';
 import { backToMainKeyboard } from '../../transport/telegram/keyboards.js';
@@ -107,6 +107,13 @@ export async function runYooKassaFulfillmentTick(
         logger.debug({ paymentId: p.id, yooId }, 'YooKassa waiting_for_capture, skip');
       }
     } catch (err) {
+      if (err instanceof PaymentLockedError) {
+        // Этот же платёж прямо сейчас фулфилится другим вызовом (webhook или
+        // соседний polling-тик) — это не ошибка, а сработавшая защита от гонки.
+        // Просто пропускаем, следующий тик увидит уже завершённый платёж.
+        logger.debug({ paymentId: p.id }, 'YooKassa: payment fulfillment locked elsewhere, skip');
+        continue;
+      }
       if (
         err instanceof SubscriptionError &&
         err.message === 'User already has active paid subscription'

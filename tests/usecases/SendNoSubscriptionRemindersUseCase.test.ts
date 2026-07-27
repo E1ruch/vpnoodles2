@@ -22,6 +22,7 @@ const mockSubscriptionRepo = {
   update: jest.fn(),
   findExpiringSoon: jest.fn(),
   findActiveExpiringWithinDays: jest.fn(),
+  findUserIdsWithSubscriptions: jest.fn(),
 };
 
 const mockNotificationLogRepo = {
@@ -39,6 +40,7 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSubscriptionRepo.findUserIdsWithSubscriptions.mockResolvedValue(new Set());
     useCase = new SendNoSubscriptionRemindersUseCase(
       mockUserRepo as never,
       mockSubscriptionRepo as never,
@@ -57,7 +59,6 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
         createdAt: hoursAgo(2),
       },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
     mockNotificationLogRepo.exists.mockResolvedValue(false);
 
     const result = await useCase.execute();
@@ -80,7 +81,6 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
         createdAt: daysAgo(5),
       },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
     // wave1 already in log, wave2 not yet
     mockNotificationLogRepo.exists.mockImplementation(
       async (_u: string, type: string) => type === 'no_subscription_reminder_1h',
@@ -99,7 +99,6 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
     mockUserRepo.findAll.mockResolvedValue([
       { id: 'u3', telegramId: 333, isActive: true, createdAt: hoursAgo(0.2) },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
 
     const result = await useCase.execute();
 
@@ -112,7 +111,7 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
     mockUserRepo.findAll.mockResolvedValue([
       { id: 'u4', telegramId: 444, isActive: true, createdAt: daysAgo(10) },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([{ id: 'sub-x', planId: 'p1' }]);
+    mockSubscriptionRepo.findUserIdsWithSubscriptions.mockResolvedValue(new Set(['u4']));
 
     const result = await useCase.execute();
 
@@ -125,7 +124,6 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
     mockUserRepo.findAll.mockResolvedValue([
       { id: 'u5', telegramId: 555, isActive: false, createdAt: daysAgo(10) },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
 
     const result = await useCase.execute();
 
@@ -134,11 +132,26 @@ describe('SendNoSubscriptionRemindersUseCase', () => {
     expect(mockNotificationService.send).not.toHaveBeenCalled();
   });
 
+  it('checks subscriptions with a single batched call, not one per user (N+1 regression)', async () => {
+    mockUserRepo.findAll.mockResolvedValue([
+      { id: 'u7', telegramId: 701, isActive: true, createdAt: daysAgo(10) },
+      { id: 'u8', telegramId: 702, isActive: true, createdAt: daysAgo(10) },
+      { id: 'u9', telegramId: 703, isActive: true, createdAt: hoursAgo(0.1) }, // too young, excluded
+      { id: 'u10', telegramId: 704, isActive: false, createdAt: daysAgo(10) }, // inactive, excluded
+    ]);
+    mockSubscriptionRepo.findUserIdsWithSubscriptions.mockResolvedValue(new Set());
+
+    await useCase.execute();
+
+    expect(mockSubscriptionRepo.findUserIdsWithSubscriptions).toHaveBeenCalledTimes(1);
+    expect(mockSubscriptionRepo.findUserIdsWithSubscriptions).toHaveBeenCalledWith(['u7', 'u8']);
+    expect(mockSubscriptionRepo.findByUserId).not.toHaveBeenCalled();
+  });
+
   it('does not re-send a wave that was already delivered (dedup)', async () => {
     mockUserRepo.findAll.mockResolvedValue([
       { id: 'u6', telegramId: 666, isActive: true, createdAt: hoursAgo(2) },
     ]);
-    mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
     mockNotificationLogRepo.exists.mockResolvedValue(true);
 
     const result = await useCase.execute();

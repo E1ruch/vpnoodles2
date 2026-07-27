@@ -26,6 +26,8 @@ const envSchema = z.object({
   REMNAWAVE_API_KEY: z.string().min(1),
   REMNAWAVE_TIMEOUT_MS: z.coerce.number().default(10000),
   REMNAWAVE_DEFAULT_SQUAD: z.string().default(''),
+  /** TTL кэша статуса подписки (getUserSubscriptionState) в Redis, сек. 0 — кэш выключен. */
+  REMNAWAVE_STATE_CACHE_TTL_SECONDS: z.coerce.number().default(10),
 
   // Payments
   YOOKASSA_SHOP_ID: z.string().optional(),

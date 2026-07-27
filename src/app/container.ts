@@ -83,8 +83,8 @@ export function createContainer(): AppContainer {
   const notificationLogRepo = new NotificationLogRepository();
 
   // Services
-  const remnawaveService = new RemnawaveClient();
   const cacheService = new RedisCacheService();
+  const remnawaveService = new RemnawaveClient(cacheService);
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
   const notificationService = new NotificationService(bot, notificationLogRepo);

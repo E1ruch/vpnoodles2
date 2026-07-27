@@ -17,6 +17,8 @@ const mockCacheService = {
   set: jest.fn(),
   delete: jest.fn(),
   exists: jest.fn(),
+  acquireLock: jest.fn(),
+  releaseLock: jest.fn(),
 };
 
 describe('PaymentOrchestrator', () => {
@@ -51,9 +53,8 @@ describe('PaymentOrchestrator', () => {
 
     it('should create a new payment when no pending payment exists', async () => {
       mockPaymentRepo.findPendingByUserId.mockResolvedValue(null);
-      mockCacheService.exists.mockResolvedValue(false);
-      mockCacheService.set.mockResolvedValue(undefined);
-      mockCacheService.delete.mockResolvedValue(undefined);
+      mockCacheService.acquireLock.mockResolvedValue(true);
+      mockCacheService.releaseLock.mockResolvedValue(undefined);
       mockPaymentRepo.create.mockResolvedValue({
         id: 'pay-new',
         userId: 'user-1',
@@ -73,11 +74,39 @@ describe('PaymentOrchestrator', () => {
 
     it('should throw PaymentError if lock already exists', async () => {
       mockPaymentRepo.findPendingByUserId.mockResolvedValue(null);
-      mockCacheService.exists.mockResolvedValue(true);
+      mockCacheService.acquireLock.mockResolvedValue(false);
 
       await expect(
         orchestrator.createPayment('user-1', 'plan-1', 'stars', 150, 'XTR'),
       ).rejects.toThrow(PaymentError);
+    });
+  });
+
+  describe('fulfillment lock', () => {
+    it('acquireFulfillmentLock delegates to cache.acquireLock with paymentId-scoped key', async () => {
+      mockCacheService.acquireLock.mockResolvedValue(true);
+
+      const result = await orchestrator.acquireFulfillmentLock('pay-1');
+
+      expect(result).toBe(true);
+      expect(mockCacheService.acquireLock).toHaveBeenCalledWith(
+        'payment_fulfill_lock:pay-1',
+        expect.any(Number),
+      );
+    });
+
+    it('acquireFulfillmentLock returns false when payment is already locked', async () => {
+      mockCacheService.acquireLock.mockResolvedValue(false);
+
+      const result = await orchestrator.acquireFulfillmentLock('pay-1');
+
+      expect(result).toBe(false);
+    });
+
+    it('releaseFulfillmentLock delegates to cache.releaseLock with the same key', async () => {
+      await orchestrator.releaseFulfillmentLock('pay-1');
+
+      expect(mockCacheService.releaseLock).toHaveBeenCalledWith('payment_fulfill_lock:pay-1');
     });
   });
 

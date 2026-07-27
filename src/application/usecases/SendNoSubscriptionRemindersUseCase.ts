@@ -45,39 +45,45 @@ export class SendNoSubscriptionRemindersUseCase {
     const users = await this.userRepo.findAll();
     result.checked = users.length;
 
-    for (const user of users) {
-      // Пропускаем неактивных пользователей.
-      if (user.isActive === false) continue;
+    // Кандидаты: активные пользователи, зарегистрированные не позже первого порога.
+    const candidates = users.filter((user) => {
+      if (user.isActive === false) return false;
+      const ageMs = now - new Date(user.createdAt).getTime();
+      return ageMs >= firstDelayMs;
+    });
+
+    // Раньше здесь был findByUserId() на каждого кандидата по отдельности (N+1) —
+    // при росте базы пользователей это N последовательных запросов на каждый тик.
+    // Теперь одна выборка сразу по всем кандидатам.
+    const userIdsWithSubscriptions = await this.subscriptionRepo.findUserIdsWithSubscriptions(
+      candidates.map((user) => user.id),
+    );
+
+    for (const user of candidates) {
+      // Есть хоть какая-то подписка (бесплатная или платная, любая давность) — не беспокоим.
+      if (userIdsWithSubscriptions.has(user.id)) continue;
 
       const ageMs = now - new Date(user.createdAt).getTime();
-      if (ageMs < firstDelayMs) continue;
-
-      // Есть хоть какая-то подписка (бесплатная или платная, любая давность) — не беспокоим.
-      const subscriptions = await this.subscriptionRepo.findByUserId(user.id);
-      if (subscriptions.length > 0) continue;
-
       const firstName = user.firstName ?? 'друг';
 
-      // Волна 1 — через 1 час.
-      if (ageMs >= firstDelayMs) {
-        const alreadySent1 = await this.notificationLogRepo.exists(
-          user.id,
-          'no_subscription_reminder_1h',
-        );
-        if (!alreadySent1) {
-          const delivered = await this.notificationService.send({
-            userId: user.id,
-            telegramId: Number(user.telegramId),
-            type: 'no_subscription_reminder_1h',
-            text: Texts.NOTIF_NO_SUBSCRIPTION_1H.replace('{firstName}', firstName),
-            replyMarkup: noSubscriptionReminderKeyboard(),
-            entityType: 'user',
-            entityId: user.id,
-            metadata: { ageHours: Math.round(ageMs / (60 * 60 * 1000)) },
-          });
-          if (delivered) result.sentWave1 += 1;
-          else result.failed += 1;
-        }
+      // Волна 1 — через 1 час. Кандидаты уже отфильтрованы по firstDelayMs выше.
+      const alreadySent1 = await this.notificationLogRepo.exists(
+        user.id,
+        'no_subscription_reminder_1h',
+      );
+      if (!alreadySent1) {
+        const delivered = await this.notificationService.send({
+          userId: user.id,
+          telegramId: Number(user.telegramId),
+          type: 'no_subscription_reminder_1h',
+          text: Texts.NOTIF_NO_SUBSCRIPTION_1H.replace('{firstName}', firstName),
+          replyMarkup: noSubscriptionReminderKeyboard(),
+          entityType: 'user',
+          entityId: user.id,
+          metadata: { ageHours: Math.round(ageMs / (60 * 60 * 1000)) },
+        });
+        if (delivered) result.sentWave1 += 1;
+        else result.failed += 1;
       }
 
       // Волна 2 — через 3 дня.

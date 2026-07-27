@@ -32,6 +32,18 @@ export class PaymentError extends AppError {
   }
 }
 
+/**
+ * Платёж в данный момент уже обрабатывается другим вызовом (webhook и polling-тик
+ * пересеклись во времени, либо два polling-тика перекрылись). Это не сбой — это
+ * штатное срабатывание distributed-лока в PurchasePlanUseCase. Вызывающий код должен
+ * тихо пропустить платёж, а не логировать это как ошибку и не завершать его как failed.
+ */
+export class PaymentLockedError extends PaymentError {
+  constructor(paymentId: string) {
+    super('Payment fulfillment already in progress', paymentId);
+  }
+}
+
 export class RemnawaveError extends AppError {
   constructor(
     message: string,

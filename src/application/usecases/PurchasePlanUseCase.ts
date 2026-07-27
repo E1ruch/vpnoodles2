@@ -8,7 +8,7 @@ import type { IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { IPaymentService } from '../../domain/interfaces/services.js';
 import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { ValidationError } from '../../shared/errors/index.js';
+import { ValidationError, PaymentLockedError } from '../../shared/errors/index.js';
 import { daysFromNow } from '../../shared/utils/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import type { PaymentProvider } from '../../shared/types/index.js';
@@ -34,7 +34,42 @@ export class PurchasePlanUseCase {
     private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
   ) {}
 
+  /**
+   * Публичная точка входа. Если это фулфилмент уже созданного платежа
+   * (options.existingPaymentId задан — так вызывают webhook, polling-тик YooKassa
+   * и обработчик successful_payment для Stars), сначала берём распределённый лок
+   * на этот paymentId. Без лока YooKassa webhook и polling-тик (или два перекрывшихся
+   * тика) могут одновременно дойти до продления подписки в Remnawave — а extendUser()
+   * не идемпотентен, поэтому без лока пользователь может получить задвоенный срок.
+   * Если лок не достался — значит платёж уже обрабатывается другим вызовом прямо
+   * сейчас, кидаем PaymentLockedError и вызывающий код должен тихо это пропустить.
+   */
   async execute(
+    userId: string,
+    planId: string,
+    provider: PaymentProvider,
+    options?: { existingPaymentId?: string; externalChargeId?: string },
+  ): Promise<PurchaseResult> {
+    const fulfillmentPaymentId = options?.existingPaymentId;
+    if (!fulfillmentPaymentId) {
+      // Нет привязанного платежа — редкий путь (нет реальных вызовов в кодовой базе
+      // на момент фикса), лочить нечего, выполняем как есть.
+      return this.executeLocked(userId, planId, provider, options);
+    }
+
+    const lockAcquired = await this.paymentService.acquireFulfillmentLock(fulfillmentPaymentId);
+    if (!lockAcquired) {
+      throw new PaymentLockedError(fulfillmentPaymentId);
+    }
+
+    try {
+      return await this.executeLocked(userId, planId, provider, options);
+    } finally {
+      await this.paymentService.releaseFulfillmentLock(fulfillmentPaymentId);
+    }
+  }
+
+  private async executeLocked(
     userId: string,
     planId: string,
     provider: PaymentProvider,
