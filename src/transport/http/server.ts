@@ -35,9 +35,11 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
       contentSecurityPolicy: {
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          // Telegram Login Widget: сам скрипт грузится с telegram.org,
-          // виджет рендерит iframe с oauth.telegram.org.
-          'script-src': ["'self'", 'https://telegram.org'],
+          // Telegram Login Widget: сам скрипт грузится с telegram.org и
+          // использует eval() внутри себя (это в самом виджете, не в нашем
+          // коде) — без 'unsafe-eval' скрипт падает с EvalError и кнопка не
+          // рендерится. Виджет рендерит iframe с oauth.telegram.org.
+          'script-src': ["'self'", "'unsafe-eval'", 'https://telegram.org'],
           'frame-src': ["'self'", 'https://oauth.telegram.org'],
         },
       },
