@@ -16,8 +16,9 @@ services:
       - '3000:3000'
       # Веб-админка. Только на localhost — наружу должен смотреть реверс-прокси
       # с TLS (nginx/Caddy), т.к. Telegram Login Widget и secure-cookie сессии
-      # требуют HTTPS. Порт можно сменить через ADMIN_PORT в .env.
-      - '127.0.0.1:3001:3001'
+      # требуют HTTPS. Порт берётся из ADMIN_PORT в .env (один источник правды,
+      # сам host-порт и внутренний порт контейнера всегда совпадают).
+      - '127.0.0.1:${ADMIN_PORT:-3001}:${ADMIN_PORT:-3001}'
 
   postgres:
     image: postgres:16-alpine
