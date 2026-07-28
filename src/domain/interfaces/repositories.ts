@@ -45,6 +45,20 @@ export interface ISubscriptionRepository {
   findUserIdsWithSubscriptions(userIds: string[]): Promise<Set<string>>;
 }
 
+export interface RevenueBreakdownEntry {
+  provider: PaymentProvider;
+  currency: string | null;
+  total: number;
+  count: number;
+}
+
+export interface RevenueSummary {
+  today: RevenueBreakdownEntry[];
+  last7Days: RevenueBreakdownEntry[];
+  last30Days: RevenueBreakdownEntry[];
+  allTime: RevenueBreakdownEntry[];
+}
+
 export interface IPaymentRepository {
   findById(id: string): Promise<Payment | null>;
   findByExternalId(externalId: string): Promise<Payment | null>;
@@ -56,6 +70,12 @@ export interface IPaymentRepository {
   create(payment: Partial<Payment>): Promise<Payment>;
   update(id: string, data: Partial<Payment>): Promise<Payment>;
   findCompletedByUserIdAndPlanId(userId: string, planId: string): Promise<Payment | null>;
+  /**
+   * Доход по завершённым платежам (status='completed', сгруппировано по
+   * provider+currency — валюты не суммируются вместе, т.к. XTR и RUB
+   * несопоставимы), за 4 окна: сегодня / 7д / 30д / всё время. Для веб-админки.
+   */
+  getRevenueSummary(): Promise<RevenueSummary>;
 }
 
 export interface IAuditLogRepository {

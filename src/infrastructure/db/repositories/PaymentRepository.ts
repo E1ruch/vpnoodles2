@@ -1,7 +1,11 @@
 import { Repository } from 'typeorm';
 import { getDataSource } from '../connection.js';
 import { Payment } from '../../../domain/entities/Payment.js';
-import type { IPaymentRepository } from '../../../domain/interfaces/repositories.js';
+import type {
+  IPaymentRepository,
+  RevenueBreakdownEntry,
+  RevenueSummary,
+} from '../../../domain/interfaces/repositories.js';
 import type { PaymentProvider } from '../../../shared/types/index.js';
 
 export class PaymentRepository implements IPaymentRepository {
@@ -64,5 +68,57 @@ export class PaymentRepository implements IPaymentRepository {
   async findCompletedByUserIdAndPlanId(userId: string, planId: string): Promise<Payment | null> {
     const repo = await this.getRepo();
     return repo.findOne({ where: { userId, planId, status: 'completed' } });
+  }
+
+  async getRevenueSummary(): Promise<RevenueSummary> {
+    const repo = await this.getRepo();
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const queryFor = (since?: Date) => {
+      const qb = repo
+        .createQueryBuilder('payment')
+        .select('payment.provider', 'provider')
+        .addSelect('payment.currency', 'currency')
+        .addSelect('SUM(payment.amount)', 'total')
+        .addSelect('COUNT(*)', 'count')
+        .where('payment.status = :status', { status: 'completed' })
+        .groupBy('payment.provider')
+        .addGroupBy('payment.currency');
+
+      if (since) {
+        qb.andWhere('payment.completedAt >= :since', { since });
+      }
+
+      return qb.getRawMany<{ provider: PaymentProvider; currency: string | null; total: string; count: string }>();
+    };
+
+    const mapRows = (
+      rows: Array<{ provider: PaymentProvider; currency: string | null; total: string; count: string }>,
+    ): RevenueBreakdownEntry[] =>
+      rows.map((row) => ({
+        provider: row.provider,
+        currency: row.currency,
+        total: Number(row.total),
+        count: Number(row.count),
+      }));
+
+    const [today, last7Days, last30Days, allTime] = await Promise.all([
+      queryFor(startOfToday),
+      queryFor(sevenDaysAgo),
+      queryFor(thirtyDaysAgo),
+      queryFor(),
+    ]);
+
+    return {
+      today: mapRows(today),
+      last7Days: mapRows(last7Days),
+      last30Days: mapRows(last30Days),
+      allTime: mapRows(allTime),
+    };
   }
 }

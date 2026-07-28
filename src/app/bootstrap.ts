@@ -8,6 +8,7 @@ import { getEnv } from '../shared/config/env.js';
 import { YooKassaService } from '../infrastructure/payments/YooKassaService.js';
 import { runYooKassaFulfillmentTick } from '../infrastructure/payments/yooKassaFulfillment.js';
 import { PaymentLockedError } from '../shared/errors/index.js';
+import { createAdminHttpApp } from '../transport/http/server.js';
 
 async function bootstrap(): Promise<void> {
   const logger = getLogger();
@@ -132,6 +133,17 @@ async function bootstrap(): Promise<void> {
 
     const port = env.PORT;
 
+    // Веб-админка: отдельный Express-сервер на своём порту, рядом с основным raw-HTTP сервером бота.
+    const adminApp = createAdminHttpApp({
+      bot: container.bot,
+      cacheService: container.cacheService,
+      remnawaveService: container.remnawaveService,
+      getAdminOverviewUseCase: container.getAdminOverviewUseCase,
+    });
+    const adminServer = adminApp.listen(env.ADMIN_PORT, () => {
+      logger.info({ port: env.ADMIN_PORT }, 'Admin HTTP server started');
+    });
+
     const pollMs = env.YOOKASSA_POLL_INTERVAL_MS;
     if (pollMs > 0 && yooKassaService.isConfigured()) {
       const tick = () => {
@@ -183,6 +195,7 @@ async function bootstrap(): Promise<void> {
       logger.info({ signal }, 'Shutting down...');
       container.bot.stop(signal);
       server.close();
+      adminServer.close();
       await closeDataSource();
       await container.cacheService.disconnect();
       process.exit(0);

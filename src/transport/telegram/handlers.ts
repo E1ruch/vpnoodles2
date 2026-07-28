@@ -10,6 +10,7 @@ import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../application
 import type { MigrateUsersToRemnawaveUseCase } from '../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { DeactivateBlockedUserUseCase } from '../../application/usecases/DeactivateBlockedUserUseCase.js';
 import type { RestoreBlockedUserUseCase } from '../../application/usecases/RestoreBlockedUserUseCase.js';
+import type { GetAdminOverviewUseCase } from '../../application/usecases/GetAdminOverviewUseCase.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import type { IPlanRepository } from '../../domain/interfaces/repositories.js';
 import type { ISubscriptionRepository } from '../../domain/interfaces/repositories.js';
@@ -78,6 +79,7 @@ export class BotHandlers {
     notificationLogRepo: INotificationLogRepository,
     deactivateBlockedUser: DeactivateBlockedUserUseCase,
     restoreBlockedUser: RestoreBlockedUserUseCase,
+    getAdminOverview: GetAdminOverviewUseCase,
   ) {
     this.bot = bot;
     this.registerUser = registerUser;
@@ -121,6 +123,7 @@ export class BotHandlers {
       migrateUsersToRemnawave,
       notificationLogRepo,
       deactivateBlockedUser,
+      getAdminOverview,
     );
   }
 

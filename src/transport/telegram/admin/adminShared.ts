@@ -3,6 +3,7 @@ import type { IUserRepository } from '../../../domain/interfaces/repositories.js
 import type { User } from '../../../domain/entities/User.js';
 import type { NotificationType } from '../../../domain/entities/NotificationLog.js';
 import { getEnv } from '../../../shared/config/env.js';
+import { parseAdminIds } from '../../../shared/utils/adminIds.js';
 
 /**
  * Общая инфраструктура для всех групп админ-обработчиков (проверка прав,
@@ -35,28 +36,10 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
 };
 
 export function isAdmin(ctx: Context): boolean {
-  const env = getEnv();
   const telegramId = ctx.from?.id;
   if (!telegramId) return false;
 
-  const adminIds = new Set<number>();
-
-  if (typeof env.ADMIN_TELEGRAM_ID === 'number' && Number.isFinite(env.ADMIN_TELEGRAM_ID)) {
-    adminIds.add(env.ADMIN_TELEGRAM_ID);
-  }
-
-  const idsFromEnv = (env.ADMIN_TELEGRAM_IDS ?? '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0)
-    .map((id) => Number(id))
-    .filter((id) => Number.isFinite(id));
-
-  for (const id of idsFromEnv) {
-    adminIds.add(id);
-  }
-
-  return adminIds.has(telegramId);
+  return parseAdminIds(getEnv()).has(telegramId);
 }
 
 export function isMessageNotModifiedError(err: unknown): boolean {

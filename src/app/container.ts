@@ -34,6 +34,7 @@ import { SendTrialExpiringRemindersUseCase } from '../application/usecases/SendT
 import { SendPaidExpiringRemindersUseCase } from '../application/usecases/SendPaidExpiringRemindersUseCase.js';
 import { DeactivateBlockedUserUseCase } from '../application/usecases/DeactivateBlockedUserUseCase.js';
 import { RestoreBlockedUserUseCase } from '../application/usecases/RestoreBlockedUserUseCase.js';
+import { GetAdminOverviewUseCase } from '../application/usecases/GetAdminOverviewUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -63,6 +64,7 @@ export interface AppContainer {
   sendNoSubscriptionRemindersUseCase: SendNoSubscriptionRemindersUseCase;
   sendTrialExpiringRemindersUseCase: SendTrialExpiringRemindersUseCase;
   sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
+  getAdminOverviewUseCase: GetAdminOverviewUseCase;
 
   // Bot
   bot: Telegraf;
@@ -189,6 +191,14 @@ export function createContainer(): AppContainer {
     syncSubscriptionExpiryUseCase,
   );
 
+  const getAdminOverviewUseCase = new GetAdminOverviewUseCase(
+    userRepo,
+    subscriptionRepo,
+    paymentRepo,
+    auditLogRepo,
+    notificationLogRepo,
+  );
+
   // Handlers
   const handlers = new BotHandlers(
     bot,
@@ -212,6 +222,7 @@ export function createContainer(): AppContainer {
     notificationLogRepo,
     deactivateBlockedUserUseCase,
     restoreBlockedUserUseCase,
+    getAdminOverviewUseCase,
   );
 
   logger.info('Container initialized');
@@ -236,6 +247,7 @@ export function createContainer(): AppContainer {
     sendNoSubscriptionRemindersUseCase,
     sendTrialExpiringRemindersUseCase,
     sendPaidExpiringRemindersUseCase,
+    getAdminOverviewUseCase,
     bot,
     handlers,
   };

@@ -12,6 +12,7 @@ import type { RenewSubscriptionUseCase } from '../../../application/usecases/Ren
 import type { SyncAllSubscriptionsFromRemnawaveUseCase } from '../../../application/usecases/SyncAllSubscriptionsFromRemnawaveUseCase.js';
 import { MigrateUsersToRemnawaveUseCase } from '../../../application/usecases/MigrateUsersToRemnawaveUseCase.js';
 import type { DeactivateBlockedUserUseCase } from '../../../application/usecases/DeactivateBlockedUserUseCase.js';
+import type { GetAdminOverviewUseCase } from '../../../application/usecases/GetAdminOverviewUseCase.js';
 import { AdminOverviewHandlers } from './AdminOverviewHandlers.js';
 import { AdminListHandlers } from './AdminListHandlers.js';
 import { AdminMigrationHandlers } from './AdminMigrationHandlers.js';
@@ -44,6 +45,7 @@ export class AdminHandlers {
     migrateUsersToRemnawave: MigrateUsersToRemnawaveUseCase,
     notificationLogRepo: INotificationLogRepository,
     deactivateBlockedUser: DeactivateBlockedUserUseCase,
+    getAdminOverview: GetAdminOverviewUseCase,
   ) {
     // Общий Set: открытие главного меню (AdminOverviewHandlers) сбрасывает
     // ожидание текста рассылки (AdminBroadcastHandlers), поэтому оба класса
@@ -51,12 +53,10 @@ export class AdminHandlers {
     const pendingCustomBroadcast = new Set<number>();
 
     this.overviewHandlers = new AdminOverviewHandlers(
-      userRepo,
-      subscriptionRepo,
       paymentRepo,
-      auditLogRepo,
       remnawaveService,
       pendingCustomBroadcast,
+      getAdminOverview,
     );
 
     this.listHandlers = new AdminListHandlers(

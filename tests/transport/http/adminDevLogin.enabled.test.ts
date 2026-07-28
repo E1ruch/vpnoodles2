@@ -1,0 +1,86 @@
+process.env['NODE_ENV'] = 'development';
+process.env['ADMIN_TELEGRAM_IDS'] = '4242';
+process.env['ADMIN_DEV_USERNAME'] = 'devadmin';
+process.env['ADMIN_DEV_PASSWORD'] = 'correct horse battery staple';
+
+import request from 'supertest';
+import { createAdminHttpApp } from '../../../src/transport/http/server';
+import type { ICacheService } from '../../../src/domain/interfaces/services';
+
+function createFakeCache(): ICacheService {
+  const store = new Map<string, { value: unknown; expiresAt: number | null }>();
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      const entry = store.get(key);
+      if (!entry) return null;
+      if (entry.expiresAt !== null && entry.expiresAt < Date.now()) {
+        store.delete(key);
+        return null;
+      }
+      return entry.value as T;
+    },
+    async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+      store.set(key, { value, expiresAt: ttlSeconds ? Date.now() + ttlSeconds * 1000 : null });
+    },
+    async delete(key: string): Promise<void> {
+      store.delete(key);
+    },
+    async exists(key: string): Promise<boolean> {
+      return store.has(key);
+    },
+    async acquireLock(): Promise<boolean> {
+      return true;
+    },
+    async releaseLock(): Promise<void> {},
+  };
+}
+
+describe('admin dev-login (enabled: NODE_ENV=development + credentials set)', () => {
+  const fakeBot = {
+    telegram: { getMe: jest.fn().mockResolvedValue({ username: 'test_admin_bot' }) },
+  };
+  const fakeGetAdminOverviewUseCase = { execute: jest.fn().mockResolvedValue({}) };
+
+  const app = createAdminHttpApp({
+    bot: fakeBot as never,
+    cacheService: createFakeCache(),
+    remnawaveService: { getNodes: jest.fn().mockResolvedValue([]) } as never,
+    getAdminOverviewUseCase: fakeGetAdminOverviewUseCase as never,
+  });
+
+  it('/api/auth/config reports devLoginEnabled: true', async () => {
+    const res = await request(app).get('/api/auth/config');
+    expect(res.body).toEqual({ botUsername: 'test_admin_bot', devLoginEnabled: true });
+  });
+
+  it('rejects a wrong password', async () => {
+    const res = await request(app)
+      .post('/api/auth/dev-login')
+      .send({ username: 'devadmin', password: 'wrong' });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a wrong username', async () => {
+    const res = await request(app)
+      .post('/api/auth/dev-login')
+      .send({ username: 'someoneelse', password: 'correct horse battery staple' });
+    expect(res.status).toBe(401);
+  });
+
+  it('logs in with correct credentials and grants access to /api/overview', async () => {
+    const loginRes = await request(app)
+      .post('/api/auth/dev-login')
+      .send({ username: 'devadmin', password: 'correct horse battery staple' });
+    expect(loginRes.status).toBe(200);
+
+    const cookies = loginRes.headers['set-cookie'] as unknown as string[];
+    expect(cookies).toBeDefined();
+
+    const meRes = await request(app).get('/api/auth/me').set('Cookie', cookies);
+    expect(meRes.status).toBe(200);
+    expect(meRes.body).toEqual({ telegramId: 4242 });
+
+    const overviewRes = await request(app).get('/api/overview').set('Cookie', cookies);
+    expect(overviewRes.status).toBe(200);
+  });
+});

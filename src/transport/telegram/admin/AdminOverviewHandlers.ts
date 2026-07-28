@@ -1,12 +1,8 @@
 import { Context, Telegraf } from 'telegraf';
-import type {
-  IUserRepository,
-  ISubscriptionRepository,
-  IPaymentRepository,
-  IAuditLogRepository,
-} from '../../../domain/interfaces/repositories.js';
+import type { IPaymentRepository } from '../../../domain/interfaces/repositories.js';
 import type { IRemnawaveService } from '../../../domain/interfaces/services.js';
 import type { RemnawaveNode } from '../../../shared/types/index.js';
+import type { GetAdminOverviewUseCase } from '../../../application/usecases/GetAdminOverviewUseCase.js';
 import { formatDate } from '../../../shared/utils/index.js';
 import { adminKeyboard, adminBackKeyboard } from '../keyboards.js';
 import { isAdmin, safeEditMessageText } from './adminShared.js';
@@ -18,13 +14,11 @@ import { isAdmin, safeEditMessageText } from './adminShared.js';
  */
 export class AdminOverviewHandlers {
   constructor(
-    private userRepo: IUserRepository,
-    private subscriptionRepo: ISubscriptionRepository,
     private paymentRepo: IPaymentRepository,
-    private auditLogRepo: IAuditLogRepository,
     private remnawaveService: IRemnawaveService,
     /** Общий с AdminBroadcastHandlers Set — открытие меню сбрасывает ожидание текста рассылки. */
     private pendingCustomBroadcast: Set<number>,
+    private getAdminOverview: GetAdminOverviewUseCase,
   ) {}
 
   register(bot: Telegraf): void {
@@ -57,12 +51,9 @@ export class AdminOverviewHandlers {
     if (!isAdmin(ctx)) return;
 
     try {
-      const usersCount = await this.userRepo.count();
-      const subscriptionsCount = await this.subscriptionRepo.count();
-      const paymentsCount = await this.paymentRepo.count();
-      const logsCount = await this.auditLogRepo.count();
+      const overview = await this.getAdminOverview.execute();
 
-      const text = `📊 Статистика:\n\n👥 Пользователей: ${usersCount}\n💳 Подписок: ${subscriptionsCount}\n💰 Платежей: ${paymentsCount}\n📋 Логов: ${logsCount}`;
+      const text = `📊 Статистика:\n\n👥 Пользователей: ${overview.usersCount}\n💳 Подписок: ${overview.subscriptionsCount}\n💰 Платежей: ${overview.paymentsCount}\n📋 Логов: ${overview.logsCount}`;
 
       await safeEditMessageText(ctx, text, {
         reply_markup: {

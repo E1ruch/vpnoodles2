@@ -3,12 +3,22 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3000),
+  /** Порт веб-админки (отдельный Express-сервер, поднимается рядом с основным HTTP-сервером). */
+  ADMIN_PORT: z.coerce.number().default(3001),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
   ADMIN_TELEGRAM_ID: z.coerce.number().optional(),
   ADMIN_TELEGRAM_IDS: z.string().optional(),
+  /**
+   * Логин/пароль для входа в веб-админку в обход Telegram Login Widget —
+   * ТОЛЬКО для локальной разработки (виджет требует зарегистрированный в
+   * BotFather HTTPS-домен, что неудобно гонять на каждый рестарт туннеля).
+   * Работает, только если NODE_ENV !== 'production' — см. createAuthRouter.
+   */
+  ADMIN_DEV_USERNAME: z.string().optional(),
+  ADMIN_DEV_PASSWORD: z.string().optional(),
 
   // Database
   DATABASE_URL: z.string().min(1),
