@@ -26,7 +26,23 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
   const logger = getLogger();
 
   app.disable('x-powered-by');
-  app.use(helmet());
+  // За приложением стоит один reverse-proxy (nginx на той же VPS) — доверяем
+  // ровно одному хопу X-Forwarded-For, иначе express-rate-limit не может
+  // безопасно определить IP клиента и падает с ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+  app.set('trust proxy', 1);
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          // Telegram Login Widget: сам скрипт грузится с telegram.org,
+          // виджет рендерит iframe с oauth.telegram.org.
+          'script-src': ["'self'", 'https://telegram.org'],
+          'frame-src': ["'self'", 'https://oauth.telegram.org'],
+        },
+      },
+    }),
+  );
   app.use(express.json());
   app.use(cookieParser());
 
