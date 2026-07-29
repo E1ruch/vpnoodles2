@@ -39,6 +39,7 @@ describe('admin dev-login (disabled: credentials not configured)', () => {
     listPaymentsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     listNotificationLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     listAuditLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: false', async () => {

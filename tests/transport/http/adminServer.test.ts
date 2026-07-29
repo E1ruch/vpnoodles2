@@ -85,6 +85,7 @@ describe('admin http server', () => {
     listPaymentsUseCase: fakeListPaymentsUseCase as never,
     listNotificationLogsUseCase: fakeListNotificationLogsUseCase as never,
     listAuditLogsUseCase: fakeListAuditLogsUseCase as never,
+    sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   it('GET /api/auth/config returns the bot username', async () => {

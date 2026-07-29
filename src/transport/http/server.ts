@@ -11,6 +11,7 @@ import type { GetUserDetailUseCase } from '../../application/usecases/GetUserDet
 import type { ListPaymentsUseCase } from '../../application/usecases/ListPaymentsUseCase.js';
 import type { ListNotificationLogsUseCase } from '../../application/usecases/ListNotificationLogsUseCase.js';
 import type { ListAuditLogsUseCase } from '../../application/usecases/ListAuditLogsUseCase.js';
+import type { SendCustomNotificationUseCase } from '../../application/usecases/SendCustomNotificationUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createOverviewRouter } from './routes/overview.js';
@@ -18,6 +19,7 @@ import { createUsersRouter } from './routes/users.js';
 import { createPaymentsRouter } from './routes/payments.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createLogsRouter } from './routes/logs.js';
+import { createCustomNotificationsRouter } from './routes/customNotifications.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -30,6 +32,7 @@ export interface AdminHttpServerDeps {
   listPaymentsUseCase: ListPaymentsUseCase;
   listNotificationLogsUseCase: ListNotificationLogsUseCase;
   listAuditLogsUseCase: ListAuditLogsUseCase;
+  sendCustomNotificationUseCase: SendCustomNotificationUseCase;
 }
 
 /** dist/transport/http (компилированный, CommonJS — __dirname доступен нативно) → ../../../admin-panel/dist в корне репо. */
@@ -89,6 +92,15 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
     createUsersRouter(deps.listUsersUseCase, deps.getUserDetailUseCase),
   );
   app.use('/api/payments', requireAdminAuth, createPaymentsRouter(deps.listPaymentsUseCase));
+  // Mounted before /api/notifications: Express matches path-prefix mounts in
+  // registration order, and /api/notifications is a prefix of this path too —
+  // registering the more specific mount first keeps requests from falling
+  // through the notifications-log router (and paying its auth check twice).
+  app.use(
+    '/api/notifications/custom',
+    requireAdminAuth,
+    createCustomNotificationsRouter(deps.sendCustomNotificationUseCase),
+  );
   app.use(
     '/api/notifications',
     requireAdminAuth,

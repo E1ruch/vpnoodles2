@@ -44,6 +44,17 @@ export class PaymentLockedError extends PaymentError {
   }
 }
 
+/**
+ * Рассылка «всем» уже выполняется (админ отправил повторный запрос до того, как
+ * фоновый цикл предыдущей рассылки завершился). Лок в SendCustomNotificationUseCase
+ * не даёт запустить второй проход по всей базе пользователей одновременно.
+ */
+export class BroadcastLockedError extends AppError {
+  constructor() {
+    super('A broadcast to all users is already in progress', 'BROADCAST_LOCKED', 409);
+  }
+}
+
 export class RemnawaveError extends AppError {
   constructor(
     message: string,

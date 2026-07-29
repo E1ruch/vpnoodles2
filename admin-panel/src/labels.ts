@@ -19,6 +19,8 @@ export const ACTION_LABELS: Record<string, string> = {
   migrate_remnawave: '🚚 Миграция в Remnawave',
   user_blocked_bot: '🚫 Заблокировал бота',
   user_restored_access: '✅ Восстановил доступ',
+  admin_custom_notification_user: '✉️ Уведомление пользователю',
+  admin_custom_notification_all: '📢 Рассылка (конструктор)',
 };
 
 export function formatNotificationType(type: string): string {

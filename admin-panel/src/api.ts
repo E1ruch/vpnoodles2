@@ -125,6 +125,22 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
+export interface SendCustomNotificationPayload {
+  audience: 'user' | 'all';
+  userId?: string;
+  text: string;
+  button?: { label: string; url: string } | null;
+}
+
+export interface SendCustomNotificationResult {
+  audience: 'user' | 'all';
+  recipients: number;
+  sent: number;
+  failed: number;
+  /** true только для audience === 'all' — рассылка продолжается в фоне, итог — в /logs. */
+  queued: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -215,4 +231,14 @@ export function getAuditLogs(params: { page: number; pageSize: number }): Promis
   query.set('page', String(params.page));
   query.set('pageSize', String(params.pageSize));
   return apiFetch(`/api/logs?${query.toString()}`);
+}
+
+export function sendCustomNotification(
+  payload: SendCustomNotificationPayload,
+): Promise<SendCustomNotificationResult> {
+  return apiFetch('/api/notifications/custom', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function getAudienceCount(audience: 'all'): Promise<{ count: number }> {
+  return apiFetch(`/api/notifications/custom/audience-count?audience=${audience}`);
 }

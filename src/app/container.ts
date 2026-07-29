@@ -40,6 +40,7 @@ import { GetUserDetailUseCase } from '../application/usecases/GetUserDetailUseCa
 import { ListPaymentsUseCase } from '../application/usecases/ListPaymentsUseCase.js';
 import { ListNotificationLogsUseCase } from '../application/usecases/ListNotificationLogsUseCase.js';
 import { ListAuditLogsUseCase } from '../application/usecases/ListAuditLogsUseCase.js';
+import { SendCustomNotificationUseCase } from '../application/usecases/SendCustomNotificationUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -75,6 +76,7 @@ export interface AppContainer {
   listPaymentsUseCase: ListPaymentsUseCase;
   listNotificationLogsUseCase: ListNotificationLogsUseCase;
   listAuditLogsUseCase: ListAuditLogsUseCase;
+  sendCustomNotificationUseCase: SendCustomNotificationUseCase;
 
   // Bot
   bot: Telegraf;
@@ -213,6 +215,13 @@ export function createContainer(): AppContainer {
   const listPaymentsUseCase = new ListPaymentsUseCase(paymentRepo);
   const listNotificationLogsUseCase = new ListNotificationLogsUseCase(notificationLogRepo, userRepo);
   const listAuditLogsUseCase = new ListAuditLogsUseCase(auditLogRepo, userRepo);
+  const sendCustomNotificationUseCase = new SendCustomNotificationUseCase(
+    bot,
+    userRepo,
+    auditLogRepo,
+    deactivateBlockedUserUseCase,
+    cacheService,
+  );
 
   // Handlers
   const handlers = new BotHandlers(
@@ -268,6 +277,7 @@ export function createContainer(): AppContainer {
     listPaymentsUseCase,
     listNotificationLogsUseCase,
     listAuditLogsUseCase,
+    sendCustomNotificationUseCase,
     bot,
     handlers,
   };

@@ -277,6 +277,52 @@ button[type='submit']:hover {
   font-weight: 700;
   box-shadow: inset 3px 0 0 var(--accent-violet);
 }
+.sidebar-link .badge-new {
+  margin-left: auto;
+}
+
+.sidebar-group-toggle {
+  font: inherit;
+}
+.sidebar-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  transition: transform 0.15s;
+  color: var(--text);
+}
+.sidebar-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sidebar-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 4px 34px;
+}
+.sidebar-sublink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.sidebar-sublink:hover {
+  background: var(--surface-hover);
+  color: var(--text-h);
+}
+.sidebar-sublink.active {
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+  font-weight: 700;
+}
+.sidebar-sublink .badge-new {
+  margin-left: auto;
+}
 
 .sidebar-logout {
   margin-top: auto;
@@ -619,6 +665,18 @@ button[type='submit']:hover {
   background: var(--surface-hover);
   color: var(--text);
 }
+.badge-new {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+  white-space: nowrap;
+}
 
 .table-scroll {
   overflow-x: auto;
@@ -644,4 +702,159 @@ button[type='submit']:hover {
 }
 .payments-table tbody tr:hover {
   background: var(--surface-hover);
+}
+
+/* ---------- notification constructor ---------- */
+
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.segmented button {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+}
+.segmented button.active {
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+  font-weight: 700;
+}
+
+.field {
+  margin-bottom: 18px;
+}
+.field > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.constructor-textarea {
+  width: 100%;
+  font: inherit;
+  resize: vertical;
+  min-height: 100px;
+}
+.char-counter {
+  margin-top: 4px;
+  text-align: right;
+}
+
+.button-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.user-pick-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.user-pick-results li button {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  text-align: left;
+}
+.user-pick-results li button:hover {
+  background: var(--surface-hover);
+}
+
+.confirm-box {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-amber);
+  background: var(--accent-amber-bg);
+}
+.confirm-box-all {
+  border-color: var(--accent-rose);
+  background: var(--accent-rose-bg);
+}
+.confirm-box h3 {
+  margin: 0 0 10px;
+}
+.confirm-box label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.confirm-box-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.constructor-result {
+  margin-bottom: 14px;
+}
+
+/* ---------- Telegram message preview mockup ---------- */
+
+.tg-preview {
+  padding: 18px;
+  border-radius: 12px;
+  background: #e7ecf1;
+}
+.tg-bubble {
+  position: relative;
+  max-width: 340px;
+  padding: 9px 34px 16px 12px;
+  border-radius: 13px 13px 13px 3px;
+  background: #ffffff;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+.tg-bubble-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #1c1c1e;
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+.tg-bubble-placeholder {
+  color: #9099a3;
+  font-style: italic;
+}
+.tg-bubble-time {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  font-size: 11px;
+  color: #9099a3;
+}
+.tg-button-row {
+  max-width: 340px;
+  margin-top: 4px;
+}
+.tg-button {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 0 0 10px 10px;
+  background: #ffffff;
+  border-top: 1px solid #eef1f4;
+  color: #3390ec;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
 }

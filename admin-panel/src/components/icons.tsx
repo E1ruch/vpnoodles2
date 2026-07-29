@@ -21,6 +21,14 @@ export function IconGrid({ size = 18 }: IconProps) {
   );
 }
 
+export function IconChevronDown({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 export function IconTrendingUp({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

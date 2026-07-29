@@ -8,6 +8,7 @@ import { RevenuePage } from './pages/RevenuePage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { ServersPage } from './pages/ServersPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { NotificationConstructorPage } from './pages/NotificationConstructorPage';
 import { LogsPage } from './pages/LogsPage';
 import { UsersPage } from './pages/UsersPage';
 import { UserDetailPage } from './pages/UserDetailPage';
@@ -44,6 +45,7 @@ function App() {
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="servers" element={<ServersPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="notifications/constructor" element={<NotificationConstructorPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="users/:id" element={<UserDetailPage />} />
