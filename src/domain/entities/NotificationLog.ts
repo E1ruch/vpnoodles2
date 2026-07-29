@@ -56,6 +56,10 @@ export class NotificationLog {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null = null;
 
+  // Индекс для сортировки "последние" в админ-панели (было отдельным CREATE INDEX
+  // в migrations/001_notification_logs.sql — перенесено сюда, чтобы migrate:safe
+  // (TypeORM synchronize) воссоздавал его на любой новой БД без ручного SQL).
+  @Index()
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 }

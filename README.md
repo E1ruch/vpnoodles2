@@ -99,6 +99,12 @@ docker compose exec app npm run seed
 
 ```
 
+Обычный деплой на прод (тот же сервер) — `bash deploy.sh`. Перенос на **новый**
+VPS (весь чек-лист: `.env`, база, nginx, DNS/webhook) — [`docs/VPS_MIGRATION.md`](docs/VPS_MIGRATION.md) + `bash migrate-vps.sh`.
+`bash migrate-vps.sh --export`              # на старом VPS → делает дамп + считает users/subscriptions/payments/audit_logs
+`bash migrate-vps.sh --import <файл>`       # на новом VPS → восстанавливает, сверяет числа
+`bash migrate-vps.sh --verify`              # просто посмотреть текущие цифры в базе
+
 ## 📋 Скрипты
 
 | Скрипт            | Описание                           |

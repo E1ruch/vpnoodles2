@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Деплой + создание таблицы notification_logs на проде (VPS).
-# Безопасно: НЕ использует synchronize(true), не удаляет данные.
+# Деплой на проде (VPS): git pull → пересборка образа → синхронизация схемы БД
+# (migrate:safe, недеструктивно — только создаёт недостающее) → перезапуск →
+# проверка, что контейнер реально поднялся и остался жив.
 #
 # Запуск с корня проекта:
 #   bash deploy.sh
@@ -10,7 +11,7 @@
 #   bash deploy.sh --no-pull        # не делать git pull
 #   bash deploy.sh --no-build       # не пересобирать образ
 #   bash deploy.sh --no-up          # не перезапускать контейнер
-#   bash deploy.sh --only-migrate   # только создать таблицу и выйти
+#   bash deploy.sh --only-migrate   # только синхронизировать схему и выйти
 #
 set -euo pipefail
 
@@ -66,49 +67,10 @@ else
 fi
 info "Использую: $DC"
 
-# --- Чтение реквизитов БД из .env ---
-# Поддерживает DATABASE_URL или отдельные DATABASE_* переменные.
 get_env() {
   local key="$1"
-  # Ищем KEY=value (без учёта кавычек вокруг значения)
-  grep -E "^${key}=" .env 2>/dev/null | head -1 | sed -E "s/^${key}=//; s/^\"//; s/\"$//; s/^'//; s/'$//" || true
+  grep -E "^${key}=" .env 2>/dev/null | head -1 | sed -E "s/^${key}=//; s/^\"//; s/\"\$//; s/^'//; s/'\$//" || true
 }
-
-DB_USER="$(get_env DATABASE_USER)"
-DB_NAME="$(get_env DATABASE_NAME)"
-DB_PASS="$(get_env DATABASE_PASSWORD)"
-PG_SERVICE="postgres"   # имя сервиса в docker-compose.yml
-
-# Если DATABASE_USER не задан — пробуем вытащить из DATABASE_URL
-if [ -z "$DB_USER" ] || [ -z "$DB_NAME" ]; then
-  DB_URL="$(get_env DATABASE_URL)"
-  if [ -n "$DB_URL" ]; then
-    info "DATABASE_USER/NAME не заданы — разбираю DATABASE_URL: $DB_URL"
-    # postgresql://USER:PASS@HOST:PORT/NAME
-    DB_USER="$(echo "$DB_URL" | sed -E 's#^postgresql?://([^:]+):.*#\1#')"
-    DB_PASS="$(echo "$DB_URL" | sed -E 's#^postgresql?://[^:]+:([^@]+)@.*#\1#')"
-    DB_NAME="$(echo "$DB_URL" | sed -E 's#.*/([^/?]+).*$#\1#')"
-  fi
-fi
-
-# Fallback: если ничего не нашли — пробуем superuser postgres (дефолт docker-compose)
-if [ -z "$DB_USER" ]; then
-  warn "DATABASE_USER не найден в .env — использую 'postgres'."
-  DB_USER="postgres"
-fi
-if [ -z "$DB_NAME" ]; then
-  warn "DATABASE_NAME не найден в .env — использую 'vpnoodles'."
-  DB_NAME="vpnoodles"
-fi
-
-info "Реквизиты БД: user=$DB_USER, db=$DB_NAME, service=$PG_SERVICE"
-
-SQL_FILE="src/infrastructure/db/migrations/001_notification_logs.sql"
-if [ ! -f "$SQL_FILE" ]; then
-  err "SQL-файл не найден: $SQL_FILE"
-  err "Сначала сделай git pull."
-  exit 1
-fi
 
 # --- 1. git pull ---
 if [ "$DO_PULL" -eq 1 ]; then
@@ -117,44 +79,26 @@ if [ "$DO_PULL" -eq 1 ]; then
   ok "Код обновлён"
 fi
 
-# --- 2. Создание таблицы ---
-info "Создаю таблицу notification_logs (безопасно, IF NOT EXISTS)..."
-
-# Сначала проверим, существует ли уже таблица — чтобы лишний раз не дёргать psql.
-TABLE_EXISTS="$($DC exec -T -e PGPASSWORD="$DB_PASS" "$PG_SERVICE" \
-  psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-  "SELECT to_regclass('notification_logs');" 2>/dev/null || true)"
-
-if [ "$TABLE_EXISTS" = "notification_logs" ]; then
-  ok "Таблица notification_logs уже существует — пропуск"
-else
-  $DC exec -T -e PGPASSWORD="$DB_PASS" "$PG_SERVICE" \
-    psql -U "$DB_USER" -d "$DB_NAME" < "$SQL_FILE"
-  ok "Таблица notification_logs создана"
-fi
-
-# Проверка
-ROW_COUNT="$($DC exec -T -e PGPASSWORD="$DB_PASS" "$PG_SERVICE" \
-  psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-  "SELECT count(*) FROM information_schema.tables WHERE table_name='notification_logs';" 2>/dev/null || echo "0")"
-
-if [ "$(echo "$ROW_COUNT" | tr -d '[:space:]')" = "1" ]; then
-  ok "Проверка: таблица на месте"
-else
-  err "Что-то пошло не так — таблица не найдена после миграции"
-  exit 1
-fi
-
-if [ "$ONLY_MIGRATE" -eq 1 ]; then
-  ok "Только миграция (--only-migrate) — выхожу"
-  exit 0
-fi
-
-# --- 3. Пересборка образа ---
+# --- 2. Пересборка образа (нужна ДО миграции — синхронизация схемы бежит
+#         внутри свежего образа, чтобы видеть актуальные entity-классы) ---
 if [ "$DO_BUILD" -eq 1 ]; then
   info "Пересобираю Docker-образ..."
   $DC build app
   ok "Образ собран"
+fi
+
+# --- 3. Синхронизация схемы БД ---
+# migrate:safe = TypeORM synchronize() БЕЗ dropBeforeSync: создаёт недостающие
+# таблицы/колонки под текущие entity-классы, ничего не удаляет и не трогает
+# существующие данные. Общий механизм для любых будущих изменений схемы —
+# не нужно на каждую новую колонку дописывать отдельный SQL-файл и шаг сюда.
+info "Синхронизирую схему БД (migrate:safe, недеструктивно)..."
+$DC run --rm -T app node dist/infrastructure/db/migrate-safe.js
+ok "Схема синхронизирована"
+
+if [ "$ONLY_MIGRATE" -eq 1 ]; then
+  ok "Только миграция (--only-migrate) — выхожу"
+  exit 0
 fi
 
 # --- 4. Перезапуск бота ---
@@ -162,6 +106,41 @@ if [ "$DO_UP" -eq 1 ]; then
   info "Перезапускаю бот..."
   $DC up -d app
   ok "Контейнер app запущен"
+
+  # --- 5. Проверка, что контейнер реально поднялся и не упал сразу же ---
+  info "Проверяю, что контейнер остался жив..."
+  APP_OK=0
+  APP_STATE="нет контейнера"
+  for _ in $(seq 1 8); do
+    sleep 2
+    APP_CID="$($DC ps -q app 2>/dev/null || true)"
+    if [ -z "$APP_CID" ]; then
+      continue
+    fi
+    APP_STATE="$(docker inspect -f '{{.State.Status}}' "$APP_CID" 2>/dev/null || echo "unknown")"
+    if [ "$APP_STATE" = "running" ]; then
+      APP_OK=1
+      break
+    fi
+    if [ "$APP_STATE" = "exited" ] || [ "$APP_STATE" = "dead" ]; then
+      break
+    fi
+  done
+
+  if [ "$APP_OK" -ne 1 ]; then
+    err "Контейнер app не поднялся (состояние: '$APP_STATE')."
+    err "Логи: $DC logs app --tail 100"
+    exit 1
+  fi
+  ok "Контейнер работает"
+
+  APP_PORT="$(get_env PORT)"
+  APP_PORT="${APP_PORT:-3000}"
+  if command -v curl >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:${APP_PORT}/health" >/dev/null 2>&1; then
+    ok "/health отвечает"
+  else
+    warn "/health не ответил — контейнер запущен, но стоит проверить логи вручную: $DC logs app --tail 100"
+  fi
 fi
 
 echo ""
