@@ -43,6 +43,12 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
           'frame-src': ["'self'", 'https://oauth.telegram.org'],
         },
       },
+      // Дефолт helmet (same-origin) рвёт window.opener у всплывающего окна
+      // Telegram-виджета (window.open к oauth.telegram.org) — виджет не может
+      // передать данные авторизации обратно через postMessage, окно просто
+      // закрывается само. same-origin-allow-popups сохраняет изоляцию для
+      // обычной навигации, но не разрывает связь с открытыми нами попапами.
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     }),
   );
   app.use(express.json());
