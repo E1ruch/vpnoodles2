@@ -224,6 +224,7 @@ export function createContainer(): AppContainer {
     subscriptionRepo,
     renewSubscriptionUseCase,
     remnawaveService,
+    planRepo,
   );
 
   // Handlers

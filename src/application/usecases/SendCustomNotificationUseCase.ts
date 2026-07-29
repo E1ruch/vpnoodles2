@@ -4,6 +4,7 @@ import type {
   IUserRepository,
   IAuditLogRepository,
   ISubscriptionRepository,
+  IPlanRepository,
 } from '../../domain/interfaces/repositories.js';
 import type { ICacheService, IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { User } from '../../domain/entities/User.js';
@@ -86,6 +87,7 @@ export class SendCustomNotificationUseCase {
     private subscriptionRepo: ISubscriptionRepository,
     private renewSubscriptionUseCase: RenewSubscriptionUseCase,
     private remnawaveService: IRemnawaveService,
+    private planRepo: IPlanRepository,
   ) {}
 
   async execute(input: SendCustomNotificationInput): Promise<SendCustomNotificationExecutionResult> {
@@ -183,6 +185,15 @@ export class SendCustomNotificationUseCase {
     if (reward.newTrafficLimitGb !== undefined) {
       if (!activeSub?.remnawaveUserId) {
         throw new NotFoundError('Remnawave user', user.id);
+      }
+      // Платные тарифы всегда безлимитны по дизайну (PurchasePlanUseCase ставит
+      // trafficLimitBytes: 0 при апгрейде) — назначение конечного лимита превратило
+      // бы безлимит в ограниченный трафик, что не входит в смысл этой награды.
+      const plan = await this.planRepo.findById(activeSub.planId);
+      if (plan?.type === 'paid') {
+        throw new ValidationError(
+          'Cannot set a traffic limit for a paid-plan user — their traffic is unlimited by design',
+        );
       }
       await this.remnawaveService.updateTrafficLimit(
         activeSub.remnawaveUserId,

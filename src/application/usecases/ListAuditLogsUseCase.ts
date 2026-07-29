@@ -8,6 +8,7 @@ export interface AuditLogEntry {
   action: string;
   entityType: string | null;
   entityId: string | null;
+  metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
 
@@ -43,6 +44,7 @@ export class ListAuditLogsUseCase {
         action: log.action,
         entityType: log.entityType,
         entityId: log.entityId,
+        metadata: log.metadata,
         createdAt: log.createdAt,
       })),
       total,

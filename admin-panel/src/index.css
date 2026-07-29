@@ -704,6 +704,42 @@ button[type='submit']:hover {
   background: var(--surface-hover);
 }
 
+/* ---------- expandable log rows ---------- */
+
+.log-row-toggle {
+  width: 20px;
+  text-align: center;
+}
+.log-chevron {
+  display: inline-block;
+  color: var(--text);
+  transition: transform 0.15s;
+}
+.log-chevron.open {
+  transform: rotate(90deg);
+}
+.log-row-expandable {
+  cursor: pointer;
+}
+.log-row-meta td {
+  padding: 0 12px 14px !important;
+  border-bottom: 1px solid var(--border);
+}
+.log-metadata {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+  color: var(--text-h);
+}
+
 /* ---------- notification constructor ---------- */
 
 .segmented {

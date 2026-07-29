@@ -4,13 +4,15 @@ import type {
   IPaymentRepository,
   IAuditLogRepository,
 } from '../../domain/interfaces/repositories.js';
-import type { SubscriptionStatus } from '../../shared/types/index.js';
+import type { SubscriptionStatus, PlanType } from '../../shared/types/index.js';
 
 const RECENT_ACTIONS_LIMIT = 20;
 
 export interface UserDetailSubscription {
   id: string;
   planName: string;
+  /** Тип тарифа ('paid' — трафик безлимитный по дизайну, см. PurchasePlanUseCase). null, если план не удалось разрешить. */
+  planType: PlanType | null;
   status: SubscriptionStatus;
   startDate: Date;
   endDate: Date;
@@ -83,6 +85,7 @@ export class GetUserDetailUseCase {
       subscriptions: subscriptions.map((subscription) => ({
         id: subscription.id,
         planName: subscription.plan?.name ?? subscription.planId,
+        planType: subscription.plan?.type ?? null,
         status: subscription.status,
         startDate: subscription.startDate,
         endDate: subscription.endDate,

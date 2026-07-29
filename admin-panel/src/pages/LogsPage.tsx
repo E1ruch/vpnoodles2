@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAuditLogs, type AuditLogEntry, type Paginated } from '../api';
 import { PageHeader } from '../components/PageHeader';
@@ -7,10 +7,15 @@ import { formatAction } from '../labels';
 
 const PAGE_SIZE = 20;
 
+function hasMetadata(metadata: Record<string, unknown> | null): boolean {
+  return !!metadata && Object.keys(metadata).length > 0;
+}
+
 export function LogsPage() {
   const [page, setPage] = useState(0);
   const [data, setData] = useState<Paginated<AuditLogEntry> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -21,7 +26,12 @@ export function LogsPage() {
 
   useEffect(() => {
     load();
+    setExpandedId(null);
   }, [load]);
+
+  function toggleExpanded(id: string) {
+    setExpandedId((current) => (current === id ? null : id));
+  }
 
   return (
     <>
@@ -43,6 +53,7 @@ export function LogsPage() {
               <table className="payments-table">
                 <thead>
                   <tr>
+                    <th />
                     <th>Действие</th>
                     <th>Пользователь</th>
                     <th>Объект</th>
@@ -50,18 +61,37 @@ export function LogsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.map((log) => (
-                    <tr key={log.id}>
-                      <td>{formatAction(log.action)}</td>
-                      <td>
-                        <Link className="user-link" to={`/users/${log.userId}`}>
-                          {log.userLabel}
-                        </Link>
-                      </td>
-                      <td>{log.entityType ? `${log.entityType} · ${log.entityId?.slice(0, 8) ?? ''}` : '—'}</td>
-                      <td>{new Date(log.createdAt).toLocaleString('ru-RU')}</td>
-                    </tr>
-                  ))}
+                  {data.items.map((log) => {
+                    const expandable = hasMetadata(log.metadata);
+                    const expanded = expandedId === log.id;
+                    return (
+                      <Fragment key={log.id}>
+                        <tr
+                          className={expandable ? 'log-row-expandable' : ''}
+                          onClick={() => expandable && toggleExpanded(log.id)}
+                        >
+                          <td className="log-row-toggle">
+                            {expandable && <span className={`log-chevron${expanded ? ' open' : ''}`}>▸</span>}
+                          </td>
+                          <td>{formatAction(log.action)}</td>
+                          <td>
+                            <Link className="user-link" to={`/users/${log.userId}`} onClick={(e) => e.stopPropagation()}>
+                              {log.userLabel}
+                            </Link>
+                          </td>
+                          <td>{log.entityType ? `${log.entityType} · ${log.entityId?.slice(0, 8) ?? ''}` : '—'}</td>
+                          <td>{new Date(log.createdAt).toLocaleString('ru-RU')}</td>
+                        </tr>
+                        {expanded && (
+                          <tr className="log-row-meta">
+                            <td colSpan={5}>
+                              <pre className="log-metadata">{JSON.stringify(log.metadata, null, 2)}</pre>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -68,6 +68,8 @@ export interface UserDetail {
   subscriptions: Array<{
     id: string;
     planName: string;
+    /** 'paid' — трафик безлимитный по дизайну (см. PurchasePlanUseCase). */
+    planType: 'trial' | 'paid' | null;
     status: string;
     startDate: string;
     endDate: string;
@@ -122,6 +124,7 @@ export interface AuditLogEntry {
   action: string;
   entityType: string | null;
   entityId: string | null;
+  metadata: Record<string, unknown> | null;
   createdAt: string;
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getAudienceCount,
+  getUser,
   getUsers,
   sendCustomNotification,
   type SendCustomNotificationReward,
@@ -96,6 +97,7 @@ export function NotificationConstructorPage() {
   const debouncedUserSearch = useDebouncedValue(userSearch);
   const [userResults, setUserResults] = useState<UserListEntry[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserListEntry | null>(null);
+  const [selectedUserPlanType, setSelectedUserPlanType] = useState<'trial' | 'paid' | null>(null);
   const [userSearchError, setUserSearchError] = useState<string | null>(null);
 
   const [confirmingUser, setConfirmingUser] = useState(false);
@@ -124,6 +126,13 @@ export function NotificationConstructorPage() {
     setSendError(null);
     setResult(null);
   }, []);
+
+  useEffect(() => {
+    if (selectedUserPlanType === 'paid') {
+      setRewardTrafficEnabled(false);
+      setRewardTrafficGb('');
+    }
+  }, [selectedUserPlanType]);
 
   const textTrimmed = text.trim();
   const textOverLimit = text.length > TEXT_MAX_LENGTH;
@@ -204,6 +213,18 @@ export function NotificationConstructorPage() {
     }
   }
 
+  function selectUser(u: UserListEntry) {
+    setSelectedUser(u);
+    setUserResults([]);
+    setSelectedUserPlanType(null);
+    getUser(u.id)
+      .then((detail) => {
+        const activeSub = detail.subscriptions.find((s) => s.isActive);
+        setSelectedUserPlanType(activeSub?.planType ?? null);
+      })
+      .catch(() => setSelectedUserPlanType(null));
+  }
+
   async function submitToAll() {
     resetOutcome();
     setSending(true);
@@ -247,6 +268,7 @@ export function NotificationConstructorPage() {
               onChange={(e) => {
                 setUserSearch(e.target.value);
                 setSelectedUser(null);
+                setSelectedUserPlanType(null);
               }}
             />
             {userSearchError && <p className="error">{userSearchError}</p>}
@@ -257,19 +279,14 @@ export function NotificationConstructorPage() {
                   {selectedUser.firstName ?? 'Без имени'}
                   {selectedUser.username ? ` (@${selectedUser.username})` : ''} · TG {selectedUser.telegramId}
                 </strong>
+                {selectedUserPlanType === 'paid' && ' · платный тариф (трафик безлимитный)'}
               </p>
             ) : (
               userResults.length > 0 && (
                 <ul className="user-pick-results">
                   {userResults.map((u) => (
                     <li key={u.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedUser(u);
-                          setUserResults([]);
-                        }}
-                      >
+                      <button type="button" onClick={() => selectUser(u)}>
                         {u.firstName ?? 'Без имени'}
                         {u.username ? ` (@${u.username})` : ''} · TG {u.telegramId}
                       </button>
@@ -377,6 +394,7 @@ export function NotificationConstructorPage() {
                   <input
                     type="checkbox"
                     checked={rewardTrafficEnabled}
+                    disabled={selectedUserPlanType === 'paid'}
                     onChange={(e) => setRewardTrafficEnabled(e.target.checked)}
                   />
                   Установить лимит трафика
@@ -387,12 +405,16 @@ export function NotificationConstructorPage() {
                     className="search-input reward-number"
                     placeholder="ГБ"
                     value={rewardTrafficGb}
-                    disabled={!rewardTrafficEnabled}
+                    disabled={!rewardTrafficEnabled || selectedUserPlanType === 'paid'}
                     onChange={(e) => setRewardTrafficGb(e.target.value)}
                   />
                   ГБ
                 </label>
-                {rewardTrafficEnabled && !trafficValid && <p className="error">Введите число ГБ больше 0.</p>}
+                {selectedUserPlanType === 'paid' ? (
+                  <p className="hint">У пользователя платный тариф — трафик безлимитный, менять нельзя.</p>
+                ) : (
+                  rewardTrafficEnabled && !trafficValid && <p className="error">Введите число ГБ больше 0.</p>
+                )}
               </div>
             </div>
           </div>

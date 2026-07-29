@@ -39,6 +39,10 @@ const mockRemnawaveService = {
   updateTrafficLimit: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockPlanRepo = {
+  findById: jest.fn(),
+};
+
 describe('SendCustomNotificationUseCase', () => {
   let useCase: SendCustomNotificationUseCase;
 
@@ -50,6 +54,7 @@ describe('SendCustomNotificationUseCase', () => {
     mockCacheService.releaseLock.mockResolvedValue(undefined);
     mockUserRepo.findByTelegramId.mockResolvedValue({ id: 'admin-1' });
     mockRemnawaveService.updateTrafficLimit.mockResolvedValue(undefined);
+    mockPlanRepo.findById.mockResolvedValue({ type: 'trial' });
 
     useCase = new SendCustomNotificationUseCase(
       mockBot as never,
@@ -60,6 +65,7 @@ describe('SendCustomNotificationUseCase', () => {
       mockSubscriptionRepo as never,
       mockRenewSubscriptionUseCase as never,
       mockRemnawaveService as never,
+      mockPlanRepo as never,
     );
   });
 
@@ -336,6 +342,47 @@ describe('SendCustomNotificationUseCase', () => {
         }),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects a traffic-limit reward for a paid-plan user (unlimited by design), without sending a message', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-1',
+        planId: 'plan-paid',
+        remnawaveUserId: 'rw-1',
+      });
+      mockPlanRepo.findById.mockResolvedValue({ id: 'plan-paid', type: 'paid' });
+
+      await expect(
+        useCase.execute({
+          audience: 'user',
+          userId: 'u1',
+          text: 'hi',
+          reward: { newTrafficLimitGb: 3 },
+          adminTelegramId: 999,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(mockRemnawaveService.updateTrafficLimit).not.toHaveBeenCalled();
+      expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('allows a traffic-limit reward for a trial-plan user', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-1',
+        planId: 'plan-trial',
+        remnawaveUserId: 'rw-1',
+      });
+      mockPlanRepo.findById.mockResolvedValue({ id: 'plan-trial', type: 'trial' });
+
+      const result = await useCase.execute({
+        audience: 'user',
+        userId: 'u1',
+        text: 'hi',
+        reward: { newTrafficLimitGb: 3 },
+        adminTelegramId: 999,
+      });
+
+      expect(mockRemnawaveService.updateTrafficLimit).toHaveBeenCalledWith('rw-1', 3 * 1024 * 1024 * 1024);
+      expect(result.rewardApplied).toMatchObject({ newTrafficLimitGb: 3 });
     });
 
     it('rejects reward when audience is "all"', async () => {

@@ -52,7 +52,7 @@ describe('GetUserDetailUseCase', () => {
     mockSubscriptionRepo.findByUserId.mockResolvedValue([
       {
         id: 's1',
-        plan: { name: 'Pro 30d' },
+        plan: { name: 'Pro 30d', type: 'paid' },
         planId: 'plan1',
         status: 'active',
         startDate: new Date('2026-01-01'),
@@ -101,6 +101,7 @@ describe('GetUserDetailUseCase', () => {
         {
           id: 's1',
           planName: 'Pro 30d',
+          planType: 'paid',
           status: 'active',
           startDate: new Date('2026-01-01'),
           endDate: new Date('2026-02-01'),

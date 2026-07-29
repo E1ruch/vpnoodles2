@@ -24,6 +24,7 @@ describe('ListAuditLogsUseCase', () => {
         action: 'trial_activated',
         entityType: 'subscription',
         entityId: 's1',
+        metadata: { planId: 'plan-trial' },
         createdAt: new Date('2026-01-01'),
       },
     ]);
@@ -42,6 +43,7 @@ describe('ListAuditLogsUseCase', () => {
         action: 'trial_activated',
         entityType: 'subscription',
         entityId: 's1',
+        metadata: { planId: 'plan-trial' },
         createdAt: new Date('2026-01-01'),
       },
     ]);
