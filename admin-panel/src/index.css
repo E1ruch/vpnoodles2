@@ -112,7 +112,7 @@ button[type='submit']:hover {
 .page {
   max-width: 960px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding: 18px 16px 40px;
 }
 .page.centered {
   min-height: 100svh;
@@ -125,9 +125,9 @@ button[type='submit']:hover {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 22px;
-  margin-bottom: 18px;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
   box-shadow: var(--card-shadow);
 }
 
@@ -347,7 +347,7 @@ button[type='submit']:hover {
   max-width: 1100px;
 }
 .content-header {
-  margin-bottom: 22px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -729,11 +729,11 @@ button[type='submit']:hover {
 }
 
 .field {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 .field > label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
@@ -750,11 +750,34 @@ button[type='submit']:hover {
   text-align: right;
 }
 
+.template-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.template-button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 600;
+}
+.template-button:hover {
+  background: var(--accent-violet-bg);
+  border-color: var(--accent-violet);
+  color: var(--accent-violet);
+}
+
 .button-fields {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
+}
+.button-fields .search-input {
+  flex: 1 1 180px;
 }
 
 .user-pick-results {
@@ -779,9 +802,9 @@ button[type='submit']:hover {
 }
 
 .confirm-box {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
   border: 1px solid var(--accent-amber);
   background: var(--accent-amber-bg);
 }
@@ -806,6 +829,30 @@ button[type='submit']:hover {
 
 .constructor-result {
   margin-bottom: 14px;
+}
+
+.reward-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.reward-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.reward-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.reward-number {
+  width: 80px;
+  text-align: center;
 }
 
 /* ---------- Telegram message preview mockup ---------- */

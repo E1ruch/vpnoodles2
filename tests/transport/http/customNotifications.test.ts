@@ -120,6 +120,39 @@ describe('customNotifications routes (/api/notifications/custom)', () => {
         .send({ audience: 'all', text: 'hi', button: { label: 'Open', url: 'javascript:alert(1)' } });
       expect(res.status).toBe(400);
     });
+
+    it('rejects a reward when audience is "all"', async () => {
+      const res = await request(app)
+        .post('/api/notifications/custom')
+        .set('Cookie', authCookie)
+        .send({ audience: 'all', text: 'hi', reward: { extraDays: 10 } });
+      expect(res.status).toBe(400);
+      expect(fakeSendCustomNotificationUseCase.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-positive extraDays', async () => {
+      const res = await request(app)
+        .post('/api/notifications/custom')
+        .set('Cookie', authCookie)
+        .send({ audience: 'user', userId: 'u1', text: 'hi', reward: { extraDays: -5 } });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a non-numeric newTrafficLimitGb', async () => {
+      const res = await request(app)
+        .post('/api/notifications/custom')
+        .set('Cookie', authCookie)
+        .send({ audience: 'user', userId: 'u1', text: 'hi', reward: { newTrafficLimitGb: 'lots' } });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects an empty reward object', async () => {
+      const res = await request(app)
+        .post('/api/notifications/custom')
+        .set('Cookie', authCookie)
+        .send({ audience: 'user', userId: 'u1', text: 'hi', reward: {} });
+      expect(res.status).toBe(400);
+    });
   });
 
   describe('happy paths (authenticated)', () => {
@@ -145,8 +178,32 @@ describe('customNotifications routes (/api/notifications/custom)', () => {
         userId: 'u1',
         text: 'hi',
         button: null,
+        reward: null,
         adminTelegramId: 4242,
       });
+    });
+
+    it('POST with audience "user" and a reward forwards the reward to the use case', async () => {
+      fakeSendCustomNotificationUseCase.execute.mockResolvedValue({
+        audience: 'user',
+        recipients: 1,
+        sent: 1,
+        failed: 0,
+        queued: false,
+        rewardApplied: { extraDays: 10 },
+        completion: Promise.resolve(),
+      });
+
+      const res = await request(app)
+        .post('/api/notifications/custom')
+        .set('Cookie', authCookie)
+        .send({ audience: 'user', userId: 'u1', text: 'hi', reward: { extraDays: 10 } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.rewardApplied).toEqual({ extraDays: 10 });
+      expect(fakeSendCustomNotificationUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ reward: { extraDays: 10, newTrafficLimitGb: undefined } }),
+      );
     });
 
     it('POST with audience "all" returns 202 and queued: true without the response awaiting completion', async () => {

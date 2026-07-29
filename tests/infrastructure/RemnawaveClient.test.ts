@@ -165,6 +165,23 @@ describe('RemnawaveClient — patchUser (GET-modify-PATCH helper)', () => {
     });
   });
 
+  it('updateTrafficLimit: overrides only trafficLimitBytes', async () => {
+    const { fetchMock, getPatchBody } = mockFetch();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const client = new RemnawaveClient(createFakeCache());
+
+    await client.updateTrafficLimit('rw-1', 3 * 1024 * 1024 * 1024);
+
+    expect(getPatchBody()).toEqual({
+      ...baseFields,
+      status: 'ACTIVE',
+      expireAt: currentUserFixture.expireAt,
+      tag: 'PAID',
+      hwidDeviceLimit: 3,
+      trafficLimitBytes: 3 * 1024 * 1024 * 1024,
+    });
+  });
+
   it('updateUserTag: overrides only tag', async () => {
     const { fetchMock, getPatchBody } = mockFetch();
     global.fetch = fetchMock as unknown as typeof global.fetch;
@@ -276,6 +293,22 @@ describe('RemnawaveClient — getUserSubscriptionState cache', () => {
     // Следующее чтение статуса обязано пойти в сеть заново, а не отдать протухший кэш —
     // именно эта гарантия защищает от того, чтобы "Мой VPN" показал старую дату сразу
     // после продления.
+    fetchMock.mockClear();
+    await client.getUserSubscriptionState('rw-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mutation (updateTrafficLimit) invalidates the cached state for that user', async () => {
+    const { fetchMock } = mockFetch();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const cache = createFakeCache();
+    const client = new RemnawaveClient(cache);
+
+    await client.getUserSubscriptionState('rw-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await client.updateTrafficLimit('rw-1', 5 * 1024 * 1024 * 1024);
+
     fetchMock.mockClear();
     await client.getUserSubscriptionState('rw-1');
     expect(fetchMock).toHaveBeenCalledTimes(1);

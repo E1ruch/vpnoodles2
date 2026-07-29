@@ -25,6 +25,7 @@ export interface IRemnawaveService {
   resumeUser(remnawaveUserId: string): Promise<void>;
   getSubscriptionUrl(remnawaveUserId: string): Promise<string>;
   updateDeviceLimit(remnawaveUserId: string, limit: number): Promise<void>;
+  updateTrafficLimit(remnawaveUserId: string, trafficLimitBytes: number): Promise<void>;
   updateUserTag(remnawaveUserId: string, tag: string): Promise<void>;
   extendUser(remnawaveUserId: string, days: number): Promise<void>;
   upgradeUser(

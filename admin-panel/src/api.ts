@@ -125,11 +125,18 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
+export interface SendCustomNotificationReward {
+  extraDays?: number;
+  newTrafficLimitGb?: number;
+}
+
 export interface SendCustomNotificationPayload {
   audience: 'user' | 'all';
   userId?: string;
   text: string;
   button?: { label: string; url: string } | null;
+  /** Только при audience === 'user'. */
+  reward?: SendCustomNotificationReward | null;
 }
 
 export interface SendCustomNotificationResult {
@@ -139,6 +146,8 @@ export interface SendCustomNotificationResult {
   failed: number;
   /** true только для audience === 'all' — рассылка продолжается в фоне, итог — в /logs. */
   queued: boolean;
+  /** Что реально было выдано пользователю, если был указан reward, иначе null. */
+  rewardApplied: Record<string, unknown> | null;
 }
 
 export class ApiError extends Error {

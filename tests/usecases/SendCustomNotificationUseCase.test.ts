@@ -27,6 +27,18 @@ const mockCacheService = {
   releaseLock: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockSubscriptionRepo = {
+  findActiveByUserId: jest.fn(),
+};
+
+const mockRenewSubscriptionUseCase = {
+  execute: jest.fn(),
+};
+
+const mockRemnawaveService = {
+  updateTrafficLimit: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('SendCustomNotificationUseCase', () => {
   let useCase: SendCustomNotificationUseCase;
 
@@ -37,6 +49,7 @@ describe('SendCustomNotificationUseCase', () => {
     mockCacheService.acquireLock.mockResolvedValue(true);
     mockCacheService.releaseLock.mockResolvedValue(undefined);
     mockUserRepo.findByTelegramId.mockResolvedValue({ id: 'admin-1' });
+    mockRemnawaveService.updateTrafficLimit.mockResolvedValue(undefined);
 
     useCase = new SendCustomNotificationUseCase(
       mockBot as never,
@@ -44,6 +57,9 @@ describe('SendCustomNotificationUseCase', () => {
       mockAuditLogRepo as never,
       mockDeactivateBlockedUser as never,
       mockCacheService as never,
+      mockSubscriptionRepo as never,
+      mockRenewSubscriptionUseCase as never,
+      mockRemnawaveService as never,
     );
   });
 
@@ -212,6 +228,149 @@ describe('SendCustomNotificationUseCase', () => {
       await result.completion;
 
       expect(mockCacheService.releaseLock).toHaveBeenCalledWith('admin:broadcast-all:lock');
+    });
+  });
+
+  describe('reward (audience: user only)', () => {
+    beforeEach(() => {
+      mockUserRepo.findById.mockResolvedValue({ id: 'u1', telegramId: 111, isActive: true });
+      mockBot.telegram.sendMessage.mockResolvedValue(undefined);
+    });
+
+    it('extends the active subscription via RenewSubscriptionUseCase before sending', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1', remnawaveUserId: 'rw-1' });
+      mockRenewSubscriptionUseCase.execute.mockResolvedValue({ endDate: new Date('2026-01-01') });
+
+      const result = await useCase.execute({
+        audience: 'user',
+        userId: 'u1',
+        text: 'hi',
+        reward: { extraDays: 10 },
+        adminTelegramId: 999,
+      });
+
+      expect(mockRenewSubscriptionUseCase.execute).toHaveBeenCalledWith('sub-1', 10);
+      expect(result.rewardApplied).toMatchObject({ extraDays: 10 });
+      expect(mockBot.telegram.sendMessage).toHaveBeenCalled();
+      expect(mockAuditLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: expect.objectContaining({ reward: expect.objectContaining({ extraDays: 10 }) }) }),
+      );
+    });
+
+    it('appends a reward notice to the actual message text so the recipient sees what was granted', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1', remnawaveUserId: 'rw-1' });
+      mockRenewSubscriptionUseCase.execute.mockResolvedValue({ endDate: new Date('2026-01-01') });
+
+      await useCase.execute({
+        audience: 'user',
+        userId: 'u1',
+        text: 'Спасибо!',
+        reward: { extraDays: 10, newTrafficLimitGb: 3 },
+        adminTelegramId: 999,
+      });
+
+      const [, sentText] = mockBot.telegram.sendMessage.mock.calls[0];
+      expect(sentText).toBe('Спасибо!\n\n🎁 Мы также продлили подписку на 10 дн. и увеличили лимит трафика до 3 ГБ!');
+      expect(mockAuditLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: expect.objectContaining({ text: sentText }) }),
+      );
+    });
+
+    it('updates the traffic limit converting GB to bytes', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1', remnawaveUserId: 'rw-1' });
+
+      const result = await useCase.execute({
+        audience: 'user',
+        userId: 'u1',
+        text: 'hi',
+        reward: { newTrafficLimitGb: 3 },
+        adminTelegramId: 999,
+      });
+
+      expect(mockRemnawaveService.updateTrafficLimit).toHaveBeenCalledWith('rw-1', 3 * 1024 * 1024 * 1024);
+      expect(result.rewardApplied).toMatchObject({ newTrafficLimitGb: 3 });
+    });
+
+    it('applies both extraDays and newTrafficLimitGb together', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1', remnawaveUserId: 'rw-1' });
+      mockRenewSubscriptionUseCase.execute.mockResolvedValue({ endDate: new Date('2026-01-01') });
+
+      const result = await useCase.execute({
+        audience: 'user',
+        userId: 'u1',
+        text: 'hi',
+        reward: { extraDays: 5, newTrafficLimitGb: 2 },
+        adminTelegramId: 999,
+      });
+
+      expect(mockRenewSubscriptionUseCase.execute).toHaveBeenCalledWith('sub-1', 5);
+      expect(mockRemnawaveService.updateTrafficLimit).toHaveBeenCalledWith('rw-1', 2 * 1024 * 1024 * 1024);
+      expect(result.rewardApplied).toMatchObject({ extraDays: 5, newTrafficLimitGb: 2 });
+    });
+
+    it('rejects extending days when the user has no active subscription, without sending a message', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue(null);
+
+      await expect(
+        useCase.execute({
+          audience: 'user',
+          userId: 'u1',
+          text: 'hi',
+          reward: { extraDays: 10 },
+          adminTelegramId: 999,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects changing traffic limit when the subscription has no remnawaveUserId, without sending a message', async () => {
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({ id: 'sub-1', remnawaveUserId: null });
+
+      await expect(
+        useCase.execute({
+          audience: 'user',
+          userId: 'u1',
+          text: 'hi',
+          reward: { newTrafficLimitGb: 3 },
+          adminTelegramId: 999,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects reward when audience is "all"', async () => {
+      await expect(
+        useCase.execute({ audience: 'all', text: 'hi', reward: { extraDays: 10 }, adminTelegramId: 999 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(mockUserRepo.findAll).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-positive or non-integer extraDays', async () => {
+      await expect(
+        useCase.execute({
+          audience: 'user',
+          userId: 'u1',
+          text: 'hi',
+          reward: { extraDays: 0 },
+          adminTelegramId: 999,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      await expect(
+        useCase.execute({
+          audience: 'user',
+          userId: 'u1',
+          text: 'hi',
+          reward: { extraDays: 1.5 },
+          adminTelegramId: 999,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejects an empty reward object with neither field set', async () => {
+      await expect(
+        useCase.execute({ audience: 'user', userId: 'u1', text: 'hi', reward: {}, adminTelegramId: 999 }),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
   });
 

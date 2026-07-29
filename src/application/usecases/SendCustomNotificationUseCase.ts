@@ -1,9 +1,14 @@
 import type { Telegraf } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/types';
-import type { IUserRepository, IAuditLogRepository } from '../../domain/interfaces/repositories.js';
-import type { ICacheService } from '../../domain/interfaces/services.js';
+import type {
+  IUserRepository,
+  IAuditLogRepository,
+  ISubscriptionRepository,
+} from '../../domain/interfaces/repositories.js';
+import type { ICacheService, IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { User } from '../../domain/entities/User.js';
 import type { DeactivateBlockedUserUseCase } from './DeactivateBlockedUserUseCase.js';
+import type { RenewSubscriptionUseCase } from './RenewSubscriptionUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { sleep } from '../../shared/utils/index.js';
 import { isTelegramBlockedError } from '../../infrastructure/notifications/telegramErrors.js';
@@ -15,10 +20,20 @@ const BUTTON_LABEL_MAX_LENGTH = 64;
 const SEND_DELAY_MS = 50;
 const BROADCAST_ALL_LOCK_KEY = 'admin:broadcast-all:lock';
 const BROADCAST_ALL_LOCK_TTL_SECONDS = 600;
+const MAX_EXTRA_DAYS = 3650;
+const MAX_TRAFFIC_LIMIT_GB = 10000;
+const BYTES_PER_GB = 1024 * 1024 * 1024;
 
 export interface SendCustomNotificationButton {
   label: string;
   url: string;
+}
+
+export interface SendCustomNotificationReward {
+  /** Продлить активную подписку на столько дней (переиспользует RenewSubscriptionUseCase). */
+  extraDays?: number;
+  /** Абсолютный новый лимит трафика в ГБ (не разница, целевое значение). */
+  newTrafficLimitGb?: number;
 }
 
 export interface SendCustomNotificationInput {
@@ -27,6 +42,8 @@ export interface SendCustomNotificationInput {
   userId?: string;
   text: string;
   button?: SendCustomNotificationButton | null;
+  /** Только при audience === 'user' — выдать реальную награду вместе с сообщением. */
+  reward?: SendCustomNotificationReward | null;
   /** Telegram id администратора, инициировавшего отправку — для записи в аудит-лог. */
   adminTelegramId: number;
 }
@@ -38,6 +55,8 @@ export interface SendCustomNotificationResult {
   failed: number;
   /** true только для audience === 'all' — цикл отправки продолжается в фоне. */
   queued: boolean;
+  /** Что реально было выдано пользователю (audience === 'user' + reward), иначе null. */
+  rewardApplied: Record<string, unknown> | null;
 }
 
 export interface SendCustomNotificationExecutionResult extends SendCustomNotificationResult {
@@ -64,6 +83,9 @@ export class SendCustomNotificationUseCase {
     private auditLogRepo: IAuditLogRepository,
     private deactivateBlockedUser: DeactivateBlockedUserUseCase,
     private cacheService: ICacheService,
+    private subscriptionRepo: ISubscriptionRepository,
+    private renewSubscriptionUseCase: RenewSubscriptionUseCase,
+    private remnawaveService: IRemnawaveService,
   ) {}
 
   async execute(input: SendCustomNotificationInput): Promise<SendCustomNotificationExecutionResult> {
@@ -113,6 +135,63 @@ export class SendCustomNotificationUseCase {
         throw new ValidationError('button.url must use http or https');
       }
     }
+
+    if (input.reward) {
+      if (input.audience !== 'user') {
+        throw new ValidationError('reward is only allowed when audience is "user"');
+      }
+      const { extraDays, newTrafficLimitGb } = input.reward;
+      if (extraDays === undefined && newTrafficLimitGb === undefined) {
+        throw new ValidationError('reward must set extraDays and/or newTrafficLimitGb');
+      }
+      if (extraDays !== undefined) {
+        if (!Number.isInteger(extraDays) || extraDays <= 0 || extraDays > MAX_EXTRA_DAYS) {
+          throw new ValidationError(`reward.extraDays must be an integer between 1 and ${MAX_EXTRA_DAYS}`);
+        }
+      }
+      if (newTrafficLimitGb !== undefined) {
+        if (
+          typeof newTrafficLimitGb !== 'number' ||
+          !Number.isFinite(newTrafficLimitGb) ||
+          newTrafficLimitGb <= 0 ||
+          newTrafficLimitGb > MAX_TRAFFIC_LIMIT_GB
+        ) {
+          throw new ValidationError(
+            `reward.newTrafficLimitGb must be a number between 0 and ${MAX_TRAFFIC_LIMIT_GB}`,
+          );
+        }
+      }
+    }
+  }
+
+  private async applyReward(
+    user: User,
+    reward: SendCustomNotificationReward,
+  ): Promise<Record<string, unknown>> {
+    const applied: Record<string, unknown> = {};
+    const activeSub = await this.subscriptionRepo.findActiveByUserId(user.id);
+
+    if (reward.extraDays !== undefined) {
+      if (!activeSub) {
+        throw new NotFoundError('Active subscription', user.id);
+      }
+      const { endDate } = await this.renewSubscriptionUseCase.execute(activeSub.id, reward.extraDays);
+      applied['extraDays'] = reward.extraDays;
+      applied['newEndDate'] = endDate.toISOString();
+    }
+
+    if (reward.newTrafficLimitGb !== undefined) {
+      if (!activeSub?.remnawaveUserId) {
+        throw new NotFoundError('Remnawave user', user.id);
+      }
+      await this.remnawaveService.updateTrafficLimit(
+        activeSub.remnawaveUserId,
+        Math.round(reward.newTrafficLimitGb * BYTES_PER_GB),
+      );
+      applied['newTrafficLimitGb'] = reward.newTrafficLimitGb;
+    }
+
+    return applied;
   }
 
   private async sendToUser(
@@ -124,10 +203,22 @@ export class SendCustomNotificationUseCase {
       throw new NotFoundError('User', input.userId as string);
     }
 
+    // Награда применяется до отправки сообщения и без частичного успеха: если
+    // выдача упадёт, сообщение не уходит вовсе — иначе получится письмо про
+    // бонус, которого пользователь не получил.
+    let rewardApplied: Record<string, unknown> | null = null;
+    if (input.reward) {
+      rewardApplied = await this.applyReward(user, input.reward);
+    }
+
+    // Награда дублируется прямо в тексте письма — иначе получатель видит только
+    // обычное сообщение и не поймёт, что ему заодно продлили подписку/лимит.
+    const textToSend = input.text + buildRewardNotice(rewardApplied);
+
     let sent = 0;
     let failed = 0;
     try {
-      await this.bot.telegram.sendMessage(user.telegramId, input.text, { reply_markup: replyMarkup });
+      await this.bot.telegram.sendMessage(user.telegramId, textToSend, { reply_markup: replyMarkup });
       sent = 1;
     } catch (err) {
       failed = 1;
@@ -140,13 +231,22 @@ export class SendCustomNotificationUseCase {
     }
 
     await this.writeAuditLog(input.adminTelegramId, 'admin_custom_notification_user', 'user', user.id, {
-      text: input.text,
+      text: textToSend,
       button: input.button ?? null,
+      reward: rewardApplied,
       sent,
       failed,
     });
 
-    return { audience: 'user', recipients: 1, sent, failed, queued: false, completion: Promise.resolve() };
+    return {
+      audience: 'user',
+      recipients: 1,
+      sent,
+      failed,
+      queued: false,
+      rewardApplied,
+      completion: Promise.resolve(),
+    };
   }
 
   private async sendToAll(
@@ -174,6 +274,7 @@ export class SendCustomNotificationUseCase {
       sent: 0,
       failed: 0,
       queued: true,
+      rewardApplied: null,
       completion,
     };
   }
@@ -235,6 +336,19 @@ export class SendCustomNotificationUseCase {
       metadata,
     });
   }
+}
+
+function buildRewardNotice(reward: Record<string, unknown> | null): string {
+  if (!reward) return '';
+  const parts: string[] = [];
+  if (typeof reward['extraDays'] === 'number') {
+    parts.push(`продлили подписку на ${reward['extraDays']} дн.`);
+  }
+  if (typeof reward['newTrafficLimitGb'] === 'number') {
+    parts.push(`увеличили лимит трафика до ${reward['newTrafficLimitGb']} ГБ`);
+  }
+  if (parts.length === 0) return '';
+  return `\n\n🎁 Мы также ${parts.join(' и ')}!`;
 }
 
 function buildReplyMarkup(

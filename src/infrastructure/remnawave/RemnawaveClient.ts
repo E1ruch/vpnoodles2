@@ -252,6 +252,13 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId, limit }, 'Device limit updated');
   }
 
+  async updateTrafficLimit(remnawaveUserId: string, trafficLimitBytes: number): Promise<void> {
+    const logger = getLogger();
+    logger.info({ remnawaveUserId, trafficLimitBytes }, 'Updating traffic limit');
+    await this.patchUser(remnawaveUserId, () => ({ trafficLimitBytes }));
+    logger.info({ remnawaveUserId, trafficLimitBytes }, 'Traffic limit updated');
+  }
+
   async updateUserTag(remnawaveUserId: string, tag: string): Promise<void> {
     const logger = getLogger();
     logger.info({ remnawaveUserId, tag }, 'Updating user tag');

@@ -7,12 +7,14 @@ import { getLogger } from '../../../shared/logger/index.js';
 import { isAppError } from '../../../shared/errors/index.js';
 
 const TELEGRAM_TEXT_MAX_LENGTH = 4096;
+const MAX_EXTRA_DAYS = 3650;
+const MAX_TRAFFIC_LIMIT_GB = 10000;
 
 function parseBody(body: unknown, adminTelegramId: number): SendCustomNotificationInput | { error: string } {
   if (!body || typeof body !== 'object') {
     return { error: 'Request body must be an object' };
   }
-  const { audience, userId, text, button } = body as Record<string, unknown>;
+  const { audience, userId, text, button, reward } = body as Record<string, unknown>;
 
   if (audience !== 'user' && audience !== 'all') {
     return { error: 'audience must be "user" or "all"' };
@@ -47,11 +49,45 @@ function parseBody(body: unknown, adminTelegramId: number): SendCustomNotificati
     parsedButton = { label, url };
   }
 
+  let parsedReward: SendCustomNotificationInput['reward'] = null;
+  if (reward !== undefined && reward !== null) {
+    if (audience !== 'user') {
+      return { error: 'reward is only allowed when audience is "user"' };
+    }
+    if (typeof reward !== 'object') {
+      return { error: 'reward must be an object' };
+    }
+    const { extraDays, newTrafficLimitGb } = reward as Record<string, unknown>;
+    if (extraDays === undefined && newTrafficLimitGb === undefined) {
+      return { error: 'reward must set extraDays and/or newTrafficLimitGb' };
+    }
+    if (
+      extraDays !== undefined &&
+      (typeof extraDays !== 'number' || !Number.isInteger(extraDays) || extraDays <= 0 || extraDays > MAX_EXTRA_DAYS)
+    ) {
+      return { error: `reward.extraDays must be an integer between 1 and ${MAX_EXTRA_DAYS}` };
+    }
+    if (
+      newTrafficLimitGb !== undefined &&
+      (typeof newTrafficLimitGb !== 'number' ||
+        !Number.isFinite(newTrafficLimitGb) ||
+        newTrafficLimitGb <= 0 ||
+        newTrafficLimitGb > MAX_TRAFFIC_LIMIT_GB)
+    ) {
+      return { error: `reward.newTrafficLimitGb must be a number between 0 and ${MAX_TRAFFIC_LIMIT_GB}` };
+    }
+    parsedReward = {
+      extraDays: extraDays as number | undefined,
+      newTrafficLimitGb: newTrafficLimitGb as number | undefined,
+    };
+  }
+
   return {
     audience,
     userId: audience === 'user' ? (userId as string) : undefined,
     text,
     button: parsedButton,
+    reward: parsedReward,
     adminTelegramId,
   };
 }

@@ -4,6 +4,7 @@ import {
   getAudienceCount,
   getUsers,
   sendCustomNotification,
+  type SendCustomNotificationReward,
   type SendCustomNotificationResult,
   type UserListEntry,
 } from '../api';
@@ -12,6 +13,42 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const TEXT_MAX_LENGTH = 4096;
 const CONFIRM_ALL_PHRASE = 'ОТПРАВИТЬ';
+
+const MESSAGE_TEMPLATES: Array<{ id: string; label: string; text: string }> = [
+  {
+    id: 'gratitude',
+    label: '🙏 Благодарность',
+    text: 'Спасибо, что вы с нами! Очень ценим, что вы выбираете наш VPN — это помогает нам делать сервис лучше.',
+  },
+  {
+    id: 'apology',
+    label: '😔 Извинения',
+    text: 'Приносим извинения за перебои в работе сервиса. Мы уже всё исправили и хотим компенсировать неудобства.',
+  },
+  {
+    id: 'holiday',
+    label: '🎉 Праздничный подарок',
+    text: 'Поздравляем с праздником! В честь этого дарим вам небольшой подарок — приятного пользования VPN 🎁',
+  },
+  {
+    id: 'reactivation',
+    label: '👋 Реактивация',
+    text: 'Давно вас не было! Мы соскучились — возвращайтесь, специально для вас есть приятный бонус.',
+  },
+  {
+    id: 'vip',
+    label: '⭐ VIP-лояльность',
+    text: 'Вы один из самых активных пользователей нашего VPN — спасибо за доверие! В знак благодарности дарим бонус.',
+  },
+];
+
+function formatRewardApplied(reward: Record<string, unknown> | null): string | null {
+  if (!reward) return null;
+  const parts: string[] = [];
+  if (typeof reward['extraDays'] === 'number') parts.push(`+${reward['extraDays']} дней`);
+  if (typeof reward['newTrafficLimitGb'] === 'number') parts.push(`лимит трафика → ${reward['newTrafficLimitGb']} ГБ`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
 
 function isValidHttpUrl(value: string): boolean {
   try {
@@ -50,6 +87,11 @@ export function NotificationConstructorPage() {
   const [buttonLabel, setButtonLabel] = useState('');
   const [buttonUrl, setButtonUrl] = useState('');
 
+  const [rewardDaysEnabled, setRewardDaysEnabled] = useState(false);
+  const [rewardDays, setRewardDays] = useState('');
+  const [rewardTrafficEnabled, setRewardTrafficEnabled] = useState(false);
+  const [rewardTrafficGb, setRewardTrafficGb] = useState('');
+
   const [userSearch, setUserSearch] = useState('');
   const debouncedUserSearch = useDebouncedValue(userSearch);
   const [userResults, setUserResults] = useState<UserListEntry[]>([]);
@@ -86,9 +128,38 @@ export function NotificationConstructorPage() {
   const textTrimmed = text.trim();
   const textOverLimit = text.length > TEXT_MAX_LENGTH;
   const buttonValid = !buttonEnabled || (buttonLabel.trim() !== '' && isValidHttpUrl(buttonUrl.trim()));
-  const messageValid = textTrimmed !== '' && !textOverLimit && buttonValid;
+
+  const extraDaysNum = Number(rewardDays);
+  const extraDaysValid = !rewardDaysEnabled || (Number.isInteger(extraDaysNum) && extraDaysNum > 0);
+  const trafficGbNum = Number(rewardTrafficGb);
+  const trafficValid = !rewardTrafficEnabled || (Number.isFinite(trafficGbNum) && trafficGbNum > 0);
+  const rewardValid = extraDaysValid && trafficValid;
+  const hasReward = audience === 'user' && (rewardDaysEnabled || rewardTrafficEnabled);
+  const reward: SendCustomNotificationReward | null = hasReward
+    ? {
+        extraDays: rewardDaysEnabled ? extraDaysNum : undefined,
+        newTrafficLimitGb: rewardTrafficEnabled ? trafficGbNum : undefined,
+      }
+    : null;
+
+  const messageValid =
+    textTrimmed !== '' && !textOverLimit && buttonValid && (audience !== 'user' || rewardValid);
 
   const button = buttonEnabled ? { label: buttonLabel.trim(), url: buttonUrl.trim() } : null;
+
+  const rewardSummaryParts = [
+    rewardDaysEnabled && extraDaysValid ? `+${extraDaysNum} дней` : null,
+    rewardTrafficEnabled && trafficValid ? `лимит трафика → ${trafficGbNum} ГБ` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  // Тот же текст, что бэкенд допишет к реальному сообщению (SendCustomNotificationUseCase
+  // buildRewardNotice) — превью должно показывать ровно то, что получит пользователь.
+  const rewardNoticeParts = [
+    rewardDaysEnabled && extraDaysValid ? `продлили подписку на ${extraDaysNum} дн.` : null,
+    rewardTrafficEnabled && trafficValid ? `увеличили лимит трафика до ${trafficGbNum} ГБ` : null,
+  ].filter((part): part is string => Boolean(part));
+  const rewardNotice = rewardNoticeParts.length > 0 ? `\n\n🎁 Мы также ${rewardNoticeParts.join(' и ')}!` : '';
+  const previewText = textTrimmed + (audience === 'user' ? rewardNotice : '');
 
   function switchAudience(next: 'user' | 'all') {
     setAudience(next);
@@ -122,6 +193,7 @@ export function NotificationConstructorPage() {
         userId: selectedUser.id,
         text: textTrimmed,
         button,
+        reward,
       });
       setResult(res);
       setConfirmingUser(false);
@@ -210,6 +282,22 @@ export function NotificationConstructorPage() {
         )}
 
         <div className="field">
+          <label>Шаблоны</label>
+          <div className="template-buttons">
+            {MESSAGE_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                className="template-button"
+                onClick={() => setText(template.text)}
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
           <label>Текст сообщения</label>
           <textarea
             className="search-input constructor-textarea"
@@ -255,9 +343,64 @@ export function NotificationConstructorPage() {
           )}
         </div>
 
+        {audience === 'user' && (
+          <div className="field">
+            <label>Награда (необязательно)</label>
+            <div className="reward-controls">
+              <div className="reward-item">
+                <label className="reward-toggle">
+                  <input
+                    type="checkbox"
+                    checked={rewardDaysEnabled}
+                    onChange={(e) => setRewardDaysEnabled(e.target.checked)}
+                  />
+                  Продлить подписку на
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className="search-input reward-number"
+                    placeholder="дней"
+                    value={rewardDays}
+                    disabled={!rewardDaysEnabled}
+                    onChange={(e) => setRewardDays(e.target.value)}
+                  />
+                  дней
+                </label>
+                {rewardDaysEnabled && !extraDaysValid && (
+                  <p className="error">Введите целое число дней больше 0.</p>
+                )}
+              </div>
+
+              <div className="reward-item">
+                <label className="reward-toggle">
+                  <input
+                    type="checkbox"
+                    checked={rewardTrafficEnabled}
+                    onChange={(e) => setRewardTrafficEnabled(e.target.checked)}
+                  />
+                  Установить лимит трафика
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    className="search-input reward-number"
+                    placeholder="ГБ"
+                    value={rewardTrafficGb}
+                    disabled={!rewardTrafficEnabled}
+                    onChange={(e) => setRewardTrafficGb(e.target.value)}
+                  />
+                  ГБ
+                </label>
+                {rewardTrafficEnabled && !trafficValid && <p className="error">Введите число ГБ больше 0.</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="field">
           <label>Предпросмотр в Telegram</label>
-          <TelegramPreview text={textTrimmed} buttonLabel={buttonEnabled && buttonLabel.trim() ? buttonLabel.trim() : null} />
+          <TelegramPreview text={previewText} buttonLabel={buttonEnabled && buttonLabel.trim() ? buttonLabel.trim() : null} />
         </div>
 
         {sendError && <p className="error">{sendError}</p>}
@@ -268,6 +411,7 @@ export function NotificationConstructorPage() {
               ? `Рассылка запущена для ${result.recipients} пользователей — результат появится в `
               : `Отправлено: ${result.sent}${result.failed > 0 ? `, ошибок: ${result.failed}` : ''} — подробности в `}
             <Link to="/logs">Логах</Link>.
+            {formatRewardApplied(result.rewardApplied) && ` Выдано: ${formatRewardApplied(result.rewardApplied)}.`}
           </p>
         )}
 
@@ -283,7 +427,9 @@ export function NotificationConstructorPage() {
           ) : (
             <div className="confirm-box">
               <p>
-                Отправить это сообщение пользователю{' '}
+                {hasReward
+                  ? `Отправить сообщение и выдать награду (${rewardSummaryParts.join(', ')}) пользователю `
+                  : 'Отправить это сообщение пользователю '}
                 <strong>{selectedUser?.firstName ?? 'Без имени'}</strong>?
               </p>
               <div className="confirm-box-actions">

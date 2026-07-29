@@ -221,6 +221,9 @@ export function createContainer(): AppContainer {
     auditLogRepo,
     deactivateBlockedUserUseCase,
     cacheService,
+    subscriptionRepo,
+    renewSubscriptionUseCase,
+    remnawaveService,
   );
 
   // Handlers
