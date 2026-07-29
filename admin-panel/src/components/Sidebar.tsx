@@ -1,24 +1,26 @@
-import { IconBell, IconCreditCard, IconGrid, IconLogOut, IconServer, IconTrendingUp } from './icons';
+import { NavLink } from 'react-router-dom';
+import {
+  IconBell,
+  IconCreditCard,
+  IconFileText,
+  IconGrid,
+  IconLogOut,
+  IconServer,
+  IconTrendingUp,
+  IconUsers,
+} from './icons';
 
-export type SectionId = 'overview' | 'revenue' | 'payments' | 'servers' | 'notifications';
-
-const NAV_ITEMS: Array<{ id: SectionId; label: string; Icon: typeof IconGrid }> = [
-  { id: 'overview', label: 'Обзор', Icon: IconGrid },
-  { id: 'revenue', label: 'Доход', Icon: IconTrendingUp },
-  { id: 'payments', label: 'Платежи', Icon: IconCreditCard },
-  { id: 'servers', label: 'Серверы', Icon: IconServer },
-  { id: 'notifications', label: 'Уведомления', Icon: IconBell },
+const NAV_ITEMS: Array<{ to: string; label: string; Icon: typeof IconGrid; end?: boolean }> = [
+  { to: '/', label: 'Обзор', Icon: IconGrid, end: true },
+  { to: '/revenue', label: 'Доход', Icon: IconTrendingUp },
+  { to: '/payments', label: 'Платежи', Icon: IconCreditCard },
+  { to: '/servers', label: 'Серверы', Icon: IconServer },
+  { to: '/notifications', label: 'Уведомления', Icon: IconBell },
+  { to: '/logs', label: 'Логи', Icon: IconFileText },
+  { to: '/users', label: 'Пользователи', Icon: IconUsers },
 ];
 
-export function Sidebar({
-  active,
-  onSelect,
-  onLogout,
-}: {
-  active: SectionId;
-  onSelect: (id: SectionId) => void;
-  onLogout: () => void;
-}) {
+export function Sidebar({ onLogout }: { onLogout: () => void }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -27,16 +29,11 @@ export function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            className={`sidebar-link${active === id ? ' active' : ''}`}
-            onClick={() => onSelect(id)}
-          >
+        {NAV_ITEMS.map(({ to, label, Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}>
             <Icon />
             <span>{label}</span>
-          </button>
+          </NavLink>
         ))}
       </nav>
 

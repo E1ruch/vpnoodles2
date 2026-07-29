@@ -10,7 +10,7 @@ const mockSubscriptionRepo = {
 
 const mockPaymentRepo = {
   getRevenueSummary: jest.fn(),
-  findAll: jest.fn(),
+  count: jest.fn(),
 };
 
 const mockAuditLogRepo = {
@@ -49,7 +49,7 @@ describe('GetAdminOverviewUseCase', () => {
     );
   });
 
-  it('aggregates counts, active-only breakdowns, revenue, notifications and recent payments', async () => {
+  it('aggregates counts, active-only breakdowns, revenue and notifications', async () => {
     mockUserRepo.findAll.mockResolvedValue([
       { id: 'u1', isActive: true },
       { id: 'u2', isActive: false },
@@ -62,32 +62,7 @@ describe('GetAdminOverviewUseCase', () => {
     mockAuditLogRepo.count.mockResolvedValue(42);
     mockPaymentRepo.getRevenueSummary.mockResolvedValue(revenueSummary);
     mockNotificationLogRepo.getStats.mockResolvedValue(notificationStats);
-    mockPaymentRepo.findAll.mockResolvedValue([
-      {
-        id: 'p1',
-        user: { username: 'alice', firstName: 'Alice' },
-        plan: { name: 'Pro' },
-        userId: 'u1',
-        planId: 'plan1',
-        amount: 199,
-        currency: 'RUB',
-        provider: 'yookassa',
-        status: 'completed',
-        createdAt: new Date('2026-01-01'),
-      },
-      {
-        id: 'p2',
-        user: null,
-        plan: null,
-        userId: 'u2',
-        planId: 'plan2',
-        amount: 50,
-        currency: 'XTR',
-        provider: 'stars',
-        status: 'completed',
-        createdAt: new Date('2026-01-02'),
-      },
-    ]);
+    mockPaymentRepo.count.mockResolvedValue(2);
 
     const result = await useCase.execute();
 
@@ -99,54 +74,22 @@ describe('GetAdminOverviewUseCase', () => {
     expect(result.logsCount).toBe(42);
     expect(result.revenue).toBe(revenueSummary);
     expect(result.notifications).toBe(notificationStats);
-    expect(result.recentPayments).toEqual([
-      {
-        id: 'p1',
-        userLabel: '@alice',
-        planLabel: 'Pro',
-        amount: 199,
-        currency: 'RUB',
-        provider: 'yookassa',
-        status: 'completed',
-        createdAt: new Date('2026-01-01'),
-      },
-      {
-        id: 'p2',
-        userLabel: 'u2',
-        planLabel: 'plan2',
-        amount: 50,
-        currency: 'XTR',
-        provider: 'stars',
-        status: 'completed',
-        createdAt: new Date('2026-01-02'),
-      },
-    ]);
+    expect(result).not.toHaveProperty('recentPayments');
   });
 
-  it('caps recentPayments at 10 entries even with more completed payments', async () => {
+  it('handles empty users/subscriptions without error', async () => {
     mockUserRepo.findAll.mockResolvedValue([]);
     mockSubscriptionRepo.findAll.mockResolvedValue([]);
     mockAuditLogRepo.count.mockResolvedValue(0);
     mockPaymentRepo.getRevenueSummary.mockResolvedValue(revenueSummary);
     mockNotificationLogRepo.getStats.mockResolvedValue(notificationStats);
-    mockPaymentRepo.findAll.mockResolvedValue(
-      Array.from({ length: 15 }, (_, i) => ({
-        id: `p${i}`,
-        user: { username: `user${i}` },
-        plan: { name: 'Plan' },
-        userId: `u${i}`,
-        planId: 'plan1',
-        amount: 100,
-        currency: 'RUB',
-        provider: 'yookassa',
-        status: 'completed',
-        createdAt: new Date(),
-      })),
-    );
+    mockPaymentRepo.count.mockResolvedValue(0);
 
     const result = await useCase.execute();
 
-    expect(result.paymentsCount).toBe(15);
-    expect(result.recentPayments).toHaveLength(10);
+    expect(result.usersCount).toBe(0);
+    expect(result.activeUsersCount).toBe(0);
+    expect(result.subscriptionsCount).toBe(0);
+    expect(result.paymentsCount).toBe(0);
   });
 });

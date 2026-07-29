@@ -12,17 +12,6 @@ export interface RevenueSummary {
   allTime: RevenueBreakdownEntry[];
 }
 
-export interface AdminOverviewPayment {
-  id: string;
-  userLabel: string;
-  planLabel: string;
-  amount: number;
-  currency: string | null;
-  provider: string;
-  status: string;
-  createdAt: string;
-}
-
 export interface RemnawaveNodeSummary {
   name: string;
   isConnected: boolean;
@@ -45,8 +34,95 @@ export interface AdminOverview {
     failed: number;
     byType: Array<{ type: string; total: number; delivered: number }>;
   };
-  recentPayments: AdminOverviewPayment[];
   nodes: RemnawaveNodeSummary[];
+}
+
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface UserListEntry {
+  id: string;
+  telegramId: number;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  isActive: boolean;
+  hasUsedTrial: boolean;
+  createdAt: string;
+}
+
+export interface UserDetail {
+  id: string;
+  telegramId: number;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  languageCode: string | null;
+  isActive: boolean;
+  hasUsedTrial: boolean;
+  createdAt: string;
+  subscriptions: Array<{
+    id: string;
+    planName: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    deviceLimit: number;
+    usedDevices: number;
+    isActive: boolean;
+  }>;
+  payments: Array<{
+    id: string;
+    planLabel: string;
+    amount: number;
+    currency: string | null;
+    provider: string;
+    status: string;
+    createdAt: string;
+  }>;
+  recentActions: Array<{
+    id: string;
+    action: string;
+    entityType: string | null;
+    entityId: string | null;
+    createdAt: string;
+  }>;
+}
+
+export interface PaymentListEntry {
+  id: string;
+  userId: string;
+  userLabel: string;
+  planLabel: string;
+  amount: number;
+  currency: string | null;
+  provider: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface NotificationLogEntry {
+  id: string;
+  userId: string;
+  userLabel: string;
+  type: string;
+  delivered: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  userLabel: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
 }
 
 export class ApiError extends Error {
@@ -96,4 +172,47 @@ export function logout(): Promise<{ ok: true }> {
 
 export function getOverview(): Promise<AdminOverview> {
   return apiFetch('/api/overview');
+}
+
+export function getUsers(params: { search?: string; page: number; pageSize: number }): Promise<Paginated<UserListEntry>> {
+  const query = new URLSearchParams();
+  if (params.search) query.set('search', params.search);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  return apiFetch(`/api/users?${query.toString()}`);
+}
+
+export function getUser(id: string): Promise<UserDetail> {
+  return apiFetch(`/api/users/${id}`);
+}
+
+export function getPayments(params: {
+  status?: string;
+  page: number;
+  pageSize: number;
+}): Promise<Paginated<PaymentListEntry>> {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  return apiFetch(`/api/payments?${query.toString()}`);
+}
+
+export function getNotificationLogs(params: {
+  type?: string;
+  page: number;
+  pageSize: number;
+}): Promise<Paginated<NotificationLogEntry>> {
+  const query = new URLSearchParams();
+  if (params.type) query.set('type', params.type);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  return apiFetch(`/api/notifications?${query.toString()}`);
+}
+
+export function getAuditLogs(params: { page: number; pageSize: number }): Promise<Paginated<AuditLogEntry>> {
+  const query = new URLSearchParams();
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  return apiFetch(`/api/logs?${query.toString()}`);
 }

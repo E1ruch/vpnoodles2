@@ -39,18 +39,20 @@ export class NotificationLogRepository implements INotificationLogRepository {
     return repo.find({ where: { userId, type }, order: { createdAt: 'DESC' } });
   }
 
-  async countAll(): Promise<number> {
+  async countAll(options?: { type?: NotificationLog['type'] }): Promise<number> {
     const repo = await this.getRepo();
-    return repo.count();
+    return repo.count({ where: options?.type ? { type: options.type } : {} });
   }
 
   async findAll(options?: {
     limit?: number;
     skip?: number;
     order?: { [key: string]: 'ASC' | 'DESC' };
+    type?: NotificationLog['type'];
   }): Promise<NotificationLog[]> {
     const repo = await this.getRepo();
     return repo.find({
+      where: options?.type ? { type: options.type } : {},
       order: options?.order ?? { createdAt: 'DESC' },
       take: options?.limit,
       skip: options?.skip,

@@ -11,13 +11,25 @@ import type {
   PlanType,
 } from '../../shared/types/index.js';
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+}
+
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByTelegramId(telegramId: number): Promise<User | null>;
   findAll(): Promise<User[]>;
+  /** Батч-резолв по id (для лейблов в списках логов/уведомлений — без N+1). */
+  findByIds(ids: string[]): Promise<User[]>;
   count(): Promise<number>;
   create(user: Partial<User>): Promise<User>;
   update(id: string, data: Partial<User>): Promise<User>;
+  /**
+   * Поиск для веб-админки: если search — число, точное совпадение по
+   * telegramId; иначе ILIKE по username/firstName/lastName.
+   */
+  searchPaginated(params: { search?: string; skip: number; limit: number }): Promise<Paginated<User>>;
 }
 
 export interface IPlanRepository {
@@ -76,6 +88,8 @@ export interface IPaymentRepository {
    * несопоставимы), за 4 окна: сегодня / 7д / 30д / всё время. Для веб-админки.
    */
   getRevenueSummary(): Promise<RevenueSummary>;
+  /** Пагинированный список платежей (с user+plan) для веб-админки, опционально по статусу. */
+  findPaginated(params: { skip: number; limit: number; status?: PaymentStatus }): Promise<Paginated<Payment>>;
 }
 
 export interface IAuditLogRepository {
@@ -105,13 +119,14 @@ export interface INotificationLogRepository {
     userId: string,
     type: NotificationLog['type'],
   ): Promise<NotificationLog[]>;
-  /** Общее количество записей в журнале уведомлений. */
-  countAll(): Promise<number>;
-  /** Список уведомлений с пагинацией (для админ-панели). */
+  /** Общее количество записей в журнале уведомлений, опционально по типу. */
+  countAll(options?: { type?: NotificationLog['type'] }): Promise<number>;
+  /** Список уведомлений с пагинацией (для админ-панели), опционально по типу. */
   findAll(options?: {
     limit?: number;
     skip?: number;
     order?: { [key: string]: 'ASC' | 'DESC' };
+    type?: NotificationLog['type'];
   }): Promise<NotificationLog[]>;
   /** Агрегированная статистика по типам и статусам доставки. */
   getStats(): Promise<{

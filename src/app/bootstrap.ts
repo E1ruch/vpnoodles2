@@ -139,6 +139,11 @@ async function bootstrap(): Promise<void> {
       cacheService: container.cacheService,
       remnawaveService: container.remnawaveService,
       getAdminOverviewUseCase: container.getAdminOverviewUseCase,
+      listUsersUseCase: container.listUsersUseCase,
+      getUserDetailUseCase: container.getUserDetailUseCase,
+      listPaymentsUseCase: container.listPaymentsUseCase,
+      listNotificationLogsUseCase: container.listNotificationLogsUseCase,
+      listAuditLogsUseCase: container.listAuditLogsUseCase,
     });
     const adminServer = adminApp.listen(env.ADMIN_PORT, () => {
       logger.info({ port: env.ADMIN_PORT }, 'Admin HTTP server started');

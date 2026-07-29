@@ -34,6 +34,11 @@ describe('admin dev-login (disabled: credentials not configured)', () => {
     cacheService: createFakeCache(),
     remnawaveService: { getNodes: jest.fn().mockResolvedValue([]) } as never,
     getAdminOverviewUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    listUsersUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getUserDetailUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    listPaymentsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    listNotificationLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    listAuditLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: false', async () => {

@@ -65,17 +65,26 @@ describe('admin http server', () => {
     logsCount: 10,
     revenue: { today: [], last7Days: [], last30Days: [], allTime: [] },
     notifications: { total: 0, delivered: 0, failed: 0, byType: [] },
-    recentPayments: [],
   };
   const fakeGetAdminOverviewUseCase = {
     execute: jest.fn().mockResolvedValue(overviewResult),
   };
+  const fakeListUsersUseCase = { execute: jest.fn().mockResolvedValue({ items: [], total: 0, page: 0, pageSize: 20 }) };
+  const fakeGetUserDetailUseCase = { execute: jest.fn().mockResolvedValue(null) };
+  const fakeListPaymentsUseCase = { execute: jest.fn().mockResolvedValue({ items: [], total: 0, page: 0, pageSize: 20 }) };
+  const fakeListNotificationLogsUseCase = { execute: jest.fn().mockResolvedValue({ items: [], total: 0, page: 0, pageSize: 20 }) };
+  const fakeListAuditLogsUseCase = { execute: jest.fn().mockResolvedValue({ items: [], total: 0, page: 0, pageSize: 20 }) };
 
   const app = createAdminHttpApp({
     bot: fakeBot as never,
     cacheService,
     remnawaveService: fakeRemnawaveService as never,
     getAdminOverviewUseCase: fakeGetAdminOverviewUseCase as never,
+    listUsersUseCase: fakeListUsersUseCase as never,
+    getUserDetailUseCase: fakeGetUserDetailUseCase as never,
+    listPaymentsUseCase: fakeListPaymentsUseCase as never,
+    listNotificationLogsUseCase: fakeListNotificationLogsUseCase as never,
+    listAuditLogsUseCase: fakeListAuditLogsUseCase as never,
   });
 
   it('GET /api/auth/config returns the bot username', async () => {

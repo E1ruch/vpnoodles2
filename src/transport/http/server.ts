@@ -6,9 +6,18 @@ import rateLimit from 'express-rate-limit';
 import type { Telegraf } from 'telegraf';
 import type { ICacheService, IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { GetAdminOverviewUseCase } from '../../application/usecases/GetAdminOverviewUseCase.js';
+import type { ListUsersUseCase } from '../../application/usecases/ListUsersUseCase.js';
+import type { GetUserDetailUseCase } from '../../application/usecases/GetUserDetailUseCase.js';
+import type { ListPaymentsUseCase } from '../../application/usecases/ListPaymentsUseCase.js';
+import type { ListNotificationLogsUseCase } from '../../application/usecases/ListNotificationLogsUseCase.js';
+import type { ListAuditLogsUseCase } from '../../application/usecases/ListAuditLogsUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createOverviewRouter } from './routes/overview.js';
+import { createUsersRouter } from './routes/users.js';
+import { createPaymentsRouter } from './routes/payments.js';
+import { createNotificationsRouter } from './routes/notifications.js';
+import { createLogsRouter } from './routes/logs.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -16,6 +25,11 @@ export interface AdminHttpServerDeps {
   cacheService: ICacheService;
   remnawaveService: IRemnawaveService;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
+  listUsersUseCase: ListUsersUseCase;
+  getUserDetailUseCase: GetUserDetailUseCase;
+  listPaymentsUseCase: ListPaymentsUseCase;
+  listNotificationLogsUseCase: ListNotificationLogsUseCase;
+  listAuditLogsUseCase: ListAuditLogsUseCase;
 }
 
 /** dist/transport/http (компилированный, CommonJS — __dirname доступен нативно) → ../../../admin-panel/dist в корне репо. */
@@ -69,6 +83,18 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
     requireAdminAuth,
     createOverviewRouter(deps.getAdminOverviewUseCase, deps.remnawaveService),
   );
+  app.use(
+    '/api/users',
+    requireAdminAuth,
+    createUsersRouter(deps.listUsersUseCase, deps.getUserDetailUseCase),
+  );
+  app.use('/api/payments', requireAdminAuth, createPaymentsRouter(deps.listPaymentsUseCase));
+  app.use(
+    '/api/notifications',
+    requireAdminAuth,
+    createNotificationsRouter(deps.listNotificationLogsUseCase),
+  );
+  app.use('/api/logs', requireAdminAuth, createLogsRouter(deps.listAuditLogsUseCase));
 
   app.use(express.static(ADMIN_PANEL_DIST));
 

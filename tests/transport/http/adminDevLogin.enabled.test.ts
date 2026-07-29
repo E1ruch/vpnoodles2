@@ -39,13 +39,18 @@ describe('admin dev-login (enabled: NODE_ENV=development + credentials set)', ()
   const fakeBot = {
     telegram: { getMe: jest.fn().mockResolvedValue({ username: 'test_admin_bot' }) },
   };
-  const fakeGetAdminOverviewUseCase = { execute: jest.fn().mockResolvedValue({}) };
+  const fakeUseCase = { execute: jest.fn().mockResolvedValue({}) };
 
   const app = createAdminHttpApp({
     bot: fakeBot as never,
     cacheService: createFakeCache(),
     remnawaveService: { getNodes: jest.fn().mockResolvedValue([]) } as never,
-    getAdminOverviewUseCase: fakeGetAdminOverviewUseCase as never,
+    getAdminOverviewUseCase: fakeUseCase as never,
+    listUsersUseCase: fakeUseCase as never,
+    getUserDetailUseCase: fakeUseCase as never,
+    listPaymentsUseCase: fakeUseCase as never,
+    listNotificationLogsUseCase: fakeUseCase as never,
+    listAuditLogsUseCase: fakeUseCase as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: true', async () => {

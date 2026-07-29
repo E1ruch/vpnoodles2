@@ -8,19 +8,6 @@ import type {
 } from '../../domain/interfaces/repositories.js';
 import type { NotificationType } from '../../domain/entities/NotificationLog.js';
 
-const RECENT_PAYMENTS_LIMIT = 10;
-
-export interface AdminOverviewPaymentEntry {
-  id: string;
-  userLabel: string;
-  planLabel: string;
-  amount: number;
-  currency: string | null;
-  provider: string;
-  status: string;
-  createdAt: Date;
-}
-
 export interface AdminOverview {
   usersCount: number;
   activeUsersCount: number;
@@ -35,7 +22,6 @@ export interface AdminOverview {
     failed: number;
     byType: Array<{ type: NotificationType; total: number; delivered: number }>;
   };
-  recentPayments: AdminOverviewPaymentEntry[];
 }
 
 /**
@@ -53,38 +39,24 @@ export class GetAdminOverviewUseCase {
   ) {}
 
   async execute(): Promise<AdminOverview> {
-    const [users, subscriptions, logsCount, revenue, notifications, payments] = await Promise.all([
+    const [users, subscriptions, logsCount, revenue, notifications, paymentsCount] = await Promise.all([
       this.userRepo.findAll(),
       this.subscriptionRepo.findAll(),
       this.auditLogRepo.count(),
       this.paymentRepo.getRevenueSummary(),
       this.notificationLogRepo.getStats(),
-      this.paymentRepo.findAll(),
+      this.paymentRepo.count(),
     ]);
-
-    const recentPayments: AdminOverviewPaymentEntry[] = payments.slice(0, RECENT_PAYMENTS_LIMIT).map((payment) => ({
-      id: payment.id,
-      userLabel: payment.user?.username
-        ? `@${payment.user.username}`
-        : (payment.user?.firstName ?? payment.userId),
-      planLabel: payment.plan?.name ?? payment.planId,
-      amount: payment.amount,
-      currency: payment.currency,
-      provider: payment.provider,
-      status: payment.status,
-      createdAt: payment.createdAt,
-    }));
 
     return {
       usersCount: users.length,
       activeUsersCount: users.filter((user) => user.isActive).length,
       subscriptionsCount: subscriptions.length,
       activeSubscriptionsCount: subscriptions.filter((subscription) => subscription.isActive).length,
-      paymentsCount: payments.length,
+      paymentsCount,
       logsCount,
       revenue,
       notifications,
-      recentPayments,
     };
   }
 }

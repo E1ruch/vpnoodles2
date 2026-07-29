@@ -35,6 +35,11 @@ import { SendPaidExpiringRemindersUseCase } from '../application/usecases/SendPa
 import { DeactivateBlockedUserUseCase } from '../application/usecases/DeactivateBlockedUserUseCase.js';
 import { RestoreBlockedUserUseCase } from '../application/usecases/RestoreBlockedUserUseCase.js';
 import { GetAdminOverviewUseCase } from '../application/usecases/GetAdminOverviewUseCase.js';
+import { ListUsersUseCase } from '../application/usecases/ListUsersUseCase.js';
+import { GetUserDetailUseCase } from '../application/usecases/GetUserDetailUseCase.js';
+import { ListPaymentsUseCase } from '../application/usecases/ListPaymentsUseCase.js';
+import { ListNotificationLogsUseCase } from '../application/usecases/ListNotificationLogsUseCase.js';
+import { ListAuditLogsUseCase } from '../application/usecases/ListAuditLogsUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -65,6 +70,11 @@ export interface AppContainer {
   sendTrialExpiringRemindersUseCase: SendTrialExpiringRemindersUseCase;
   sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
+  listUsersUseCase: ListUsersUseCase;
+  getUserDetailUseCase: GetUserDetailUseCase;
+  listPaymentsUseCase: ListPaymentsUseCase;
+  listNotificationLogsUseCase: ListNotificationLogsUseCase;
+  listAuditLogsUseCase: ListAuditLogsUseCase;
 
   // Bot
   bot: Telegraf;
@@ -198,6 +208,11 @@ export function createContainer(): AppContainer {
     auditLogRepo,
     notificationLogRepo,
   );
+  const listUsersUseCase = new ListUsersUseCase(userRepo);
+  const getUserDetailUseCase = new GetUserDetailUseCase(userRepo, subscriptionRepo, paymentRepo, auditLogRepo);
+  const listPaymentsUseCase = new ListPaymentsUseCase(paymentRepo);
+  const listNotificationLogsUseCase = new ListNotificationLogsUseCase(notificationLogRepo, userRepo);
+  const listAuditLogsUseCase = new ListAuditLogsUseCase(auditLogRepo, userRepo);
 
   // Handlers
   const handlers = new BotHandlers(
@@ -248,6 +263,11 @@ export function createContainer(): AppContainer {
     sendTrialExpiringRemindersUseCase,
     sendPaidExpiringRemindersUseCase,
     getAdminOverviewUseCase,
+    listUsersUseCase,
+    getUserDetailUseCase,
+    listPaymentsUseCase,
+    listNotificationLogsUseCase,
+    listAuditLogsUseCase,
     bot,
     handlers,
   };

@@ -3,10 +3,11 @@ import { getDataSource } from '../connection.js';
 import { Payment } from '../../../domain/entities/Payment.js';
 import type {
   IPaymentRepository,
+  Paginated,
   RevenueBreakdownEntry,
   RevenueSummary,
 } from '../../../domain/interfaces/repositories.js';
-import type { PaymentProvider } from '../../../shared/types/index.js';
+import type { PaymentProvider, PaymentStatus } from '../../../shared/types/index.js';
 
 export class PaymentRepository implements IPaymentRepository {
   private getRepo(): Promise<Repository<Payment>> {
@@ -25,7 +26,7 @@ export class PaymentRepository implements IPaymentRepository {
 
   async findByUserId(userId: string): Promise<Payment[]> {
     const repo = await this.getRepo();
-    return repo.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    return repo.find({ where: { userId }, relations: ['plan'], order: { createdAt: 'DESC' } });
   }
 
   async findPendingByUserId(userId: string): Promise<Payment | null> {
@@ -120,5 +121,17 @@ export class PaymentRepository implements IPaymentRepository {
       last30Days: mapRows(last30Days),
       allTime: mapRows(allTime),
     };
+  }
+
+  async findPaginated(params: { skip: number; limit: number; status?: PaymentStatus }): Promise<Paginated<Payment>> {
+    const repo = await this.getRepo();
+    const [items, total] = await repo.findAndCount({
+      where: params.status ? { status: params.status } : {},
+      relations: ['user', 'plan'],
+      order: { createdAt: 'DESC' },
+      skip: params.skip,
+      take: params.limit,
+    });
+    return { items, total };
   }
 }

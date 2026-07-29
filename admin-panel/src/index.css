@@ -263,6 +263,7 @@ button[type='submit']:hover {
   font-weight: 500;
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   width: 100%;
 }
 .sidebar-link:hover {
@@ -301,9 +302,73 @@ button[type='submit']:hover {
 }
 .content-header {
   margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .content-header h1 {
   margin: 0;
+}
+.content-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-input,
+.filter-select {
+  font: inherit;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+}
+.search-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: var(--accent-violet);
+}
+.search-input {
+  min-width: 220px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text);
+}
+.pagination button {
+  padding: 6px 14px;
+}
+
+.user-link {
+  color: var(--accent-violet);
+  font-weight: 600;
+  text-decoration: none;
+}
+.user-link:hover {
+  text-decoration: underline;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.back-link:hover {
+  color: var(--accent-violet);
 }
 
 @media (max-width: 760px) {
