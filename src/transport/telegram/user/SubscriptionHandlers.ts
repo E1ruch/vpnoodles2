@@ -20,6 +20,7 @@ import {
   trialConfirmKeyboard,
   backToMainKeyboard,
 } from '../keyboards.js';
+import { sendSubscriptionDelivered } from './subscriptionDelivery.js';
 
 /**
  * Экраны "Мой VPN" / выбор тарифа / активация бесплатного тарифа / продление.
@@ -44,6 +45,7 @@ export class SubscriptionHandlers {
     bot.action('plan_paid', this.handlePlanPaid);
     bot.action('activate_trial', this.handleActivateTrial);
     bot.action('instructions', this.handleInstructions);
+    bot.action('show_qr', this.handleShowQr);
     bot.action(/^renew_(.+)$/, this.handleRenew);
   }
 
@@ -139,15 +141,14 @@ export class SubscriptionHandlers {
 
       const result = await this.activateTrial.execute(user.id);
 
-      const qrCode = await this.qrCodeService.generateBase64(result.subscriptionUrl);
-      const qrBase64 = qrCode.split(',')[1] ?? '';
+      try {
+        await ctx.deleteMessage();
+      } catch {
+        // Сообщение с кнопкой "Активировать" могло устареть или бот без прав на удаление —
+        // не критично, просто останется рядом с новым сообщением о выдаче подписки.
+      }
 
-      await ctx.editMessageText(Texts.PAYMENT_SUCCESS);
-      await ctx.replyWithPhoto(
-        { source: Buffer.from(qrBase64, 'base64') },
-        { caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl) },
-      );
-      await ctx.reply(Texts.INSTRUCTIONS, { reply_markup: backToMainKeyboard() });
+      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl);
     } catch (err) {
       logger.error({ err }, 'Error activating trial');
       if (isAppError(err)) {
@@ -185,6 +186,34 @@ export class SubscriptionHandlers {
         { reply_markup: backToMainKeyboard() },
       );
     } catch {
+      await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
+    }
+  };
+
+  private handleShowQr = async (ctx: Context): Promise<void> => {
+    const logger = getLogger();
+    try {
+      const telegramUser = ctx.from;
+      if (!telegramUser) return;
+
+      const user = await this.userRepo.findByTelegramId(telegramUser.id);
+      if (!user) return;
+
+      const sub = await this.getSubscription.execute(user.id);
+      if (!sub?.subscriptionUrl) {
+        await ctx.answerCbQuery('У вас нет активной подписки.');
+        return;
+      }
+
+      const qrCode = await this.qrCodeService.generateBase64(sub.subscriptionUrl);
+      const qrBase64 = qrCode.split(',')[1] ?? '';
+      await ctx.replyWithPhoto(
+        { source: Buffer.from(qrBase64, 'base64') },
+        { caption: Texts.SUBSCRIPTION_URL.replace('{url}', sub.subscriptionUrl) },
+      );
+      await ctx.answerCbQuery();
+    } catch (err) {
+      logger.error({ err }, 'Error showing QR code');
       await ctx.reply(Texts.ERROR_GENERIC, { reply_markup: backToMainKeyboard() });
     }
   };

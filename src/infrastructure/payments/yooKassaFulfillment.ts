@@ -1,45 +1,21 @@
-import { Buffer } from 'node:buffer';
 import type { Telegraf } from 'telegraf';
 import type { PurchasePlanUseCase } from '../../application/usecases/PurchasePlanUseCase.js';
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
-import type { IQRCodeService } from '../../domain/interfaces/services.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { SubscriptionError, PaymentLockedError } from '../../shared/errors/index.js';
 import { YooKassaService } from './YooKassaService.js';
-import { Texts } from '../../transport/telegram/texts.js';
-import { backToMainKeyboard } from '../../transport/telegram/keyboards.js';
+import { sendSubscriptionDelivered } from '../../transport/telegram/user/subscriptionDelivery.js';
 
 export interface YooKassaFulfillmentDeps {
   paymentRepo: IPaymentRepository;
   purchasePlanUseCase: PurchasePlanUseCase;
   userRepo: IUserRepository;
-  qrCodeService: IQRCodeService;
   bot: Telegraf;
 }
 
 function isUuidLooksLikeYooKassaPaymentId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
-}
-
-async function notifyUserDelivered(
-  deps: YooKassaFulfillmentDeps,
-  telegramId: number,
-  subscriptionUrl: string,
-): Promise<void> {
-  await deps.bot.telegram.sendMessage(telegramId, Texts.PAYMENT_SUCCESS);
-  const qrCode = await deps.qrCodeService.generateBase64(subscriptionUrl);
-  const qrBase64 = qrCode.split(',')[1] ?? '';
-  await deps.bot.telegram.sendPhoto(
-    telegramId,
-    { source: Buffer.from(qrBase64, 'base64') },
-    {
-      caption: Texts.SUBSCRIPTION_URL.replace('{url}', subscriptionUrl),
-    },
-  );
-  await deps.bot.telegram.sendMessage(telegramId, Texts.INSTRUCTIONS, {
-    reply_markup: backToMainKeyboard(),
-  });
 }
 
 export async function runYooKassaFulfillmentTick(
@@ -94,7 +70,12 @@ export async function runYooKassaFulfillmentTick(
           const user = await deps.userRepo.findById(p.userId);
           if (user) {
             try {
-              await notifyUserDelivered(deps, user.telegramId, result.subscriptionUrl);
+              await sendSubscriptionDelivered(
+                deps.bot.telegram,
+                user.telegramId,
+                result.subscriptionId,
+                result.subscriptionUrl,
+              );
             } catch (notifyErr) {
               logger.warn({ notifyErr, telegramId: user.telegramId }, 'Failed to notify user after YooKassa fulfill');
             }

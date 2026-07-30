@@ -146,7 +146,10 @@ export function vpnActionsKeyboard(
     buttons.push([{ text: '🔄 Продлить', callback_data: `renew_${subscriptionId}` }]);
   }
 
-  buttons.push([{ text: '📖 Инструкция', callback_data: 'instructions' }]);
+  buttons.push([
+    { text: '📷 QR-код', callback_data: 'show_qr' },
+    { text: '📖 Инструкция', callback_data: 'instructions' },
+  ]);
   buttons.push([{ text: 'Назад', callback_data: 'back_main' }]);
 
   return { inline_keyboard: buttons };

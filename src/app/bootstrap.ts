@@ -160,7 +160,6 @@ async function bootstrap(): Promise<void> {
             paymentRepo: container.paymentRepo,
             purchasePlanUseCase: container.purchasePlanUseCase,
             userRepo: container.userRepo,
-            qrCodeService: container.qrCodeService,
             bot: container.bot,
           },
           yooKassaService,

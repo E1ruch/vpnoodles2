@@ -95,7 +95,6 @@ export class BotHandlers {
       planRepo,
       paymentRepo,
       auditLogRepo,
-      qrCodeService,
       paymentService,
       purchasePlan,
     );

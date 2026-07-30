@@ -6,7 +6,7 @@ import type {
   IPaymentRepository,
   IAuditLogRepository,
 } from '../../../domain/interfaces/repositories.js';
-import type { IQRCodeService, IPaymentService } from '../../../domain/interfaces/services.js';
+import type { IPaymentService } from '../../../domain/interfaces/services.js';
 import { getLogger } from '../../../shared/logger/index.js';
 import { isAppError, PaymentLockedError } from '../../../shared/errors/index.js';
 import { formatCurrency } from '../../../shared/utils/index.js';
@@ -20,6 +20,7 @@ import {
 } from '../keyboards.js';
 import { YooKassaService } from '../../../infrastructure/payments/YooKassaService.js';
 import { runYooKassaFulfillmentTick } from '../../../infrastructure/payments/yooKassaFulfillment.js';
+import { sendSubscriptionDelivered } from './subscriptionDelivery.js';
 
 /**
  * Весь платёжный флоу: выбор способа оплаты, инвойсы Stars/ЮKassa, отмена,
@@ -36,7 +37,6 @@ export class PaymentHandlers {
     private planRepo: IPlanRepository,
     private paymentRepo: IPaymentRepository,
     private auditLogRepo: IAuditLogRepository,
-    private qrCodeService: IQRCodeService,
     private paymentService: IPaymentService,
     private purchasePlan: PurchasePlanUseCase,
   ) {
@@ -71,7 +71,6 @@ export class PaymentHandlers {
           paymentRepo: this.paymentRepo,
           purchasePlanUseCase: this.purchasePlan,
           userRepo: this.userRepo,
-          qrCodeService: this.qrCodeService,
           bot: this.bot,
         },
         this.yooKassaService,
@@ -521,15 +520,7 @@ export class PaymentHandlers {
           `${provider}_${paymentId}`,
       });
 
-      await ctx.reply(Texts.PAYMENT_SUCCESS);
-
-      const qrCode = await this.qrCodeService.generateBase64(result.subscriptionUrl);
-      const qrBase64 = qrCode.split(',')[1] ?? '';
-      await ctx.replyWithPhoto(
-        { source: Buffer.from(qrBase64, 'base64') },
-        { caption: Texts.SUBSCRIPTION_URL.replace('{url}', result.subscriptionUrl) },
-      );
-      await ctx.reply(Texts.INSTRUCTIONS, { reply_markup: backToMainKeyboard() });
+      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl);
 
       await this.auditLogRepo.create({
         userId: user.id,
