@@ -202,6 +202,21 @@ export function getOverview(): Promise<AdminOverview> {
   return apiFetch('/api/overview');
 }
 
+export interface UsersGrowthPoint {
+  date: string;
+  newUsers: number;
+  totalUsers: number;
+}
+
+export interface UsersGrowthResult {
+  days: number;
+  series: UsersGrowthPoint[];
+}
+
+export function getUsersGrowth(days: 7 | 30 | 90): Promise<UsersGrowthResult> {
+  return apiFetch(`/api/overview/users-growth?days=${days}`);
+}
+
 export function getUsers(params: { search?: string; page: number; pageSize: number }): Promise<Paginated<UserListEntry>> {
   const query = new URLSearchParams();
   if (params.search) query.set('search', params.search);

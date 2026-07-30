@@ -54,6 +54,7 @@ describe('customNotifications routes (/api/notifications/custom)', () => {
     listNotificationLogsUseCase: fakeUseCase as never,
     listAuditLogsUseCase: fakeUseCase as never,
     sendCustomNotificationUseCase: fakeSendCustomNotificationUseCase as never,
+    getUsersGrowthUseCase: fakeUseCase as never,
   });
 
   let authCookie: string[];

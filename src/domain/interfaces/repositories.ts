@@ -30,6 +30,10 @@ export interface IUserRepository {
    * telegramId; иначе ILIKE по username/firstName/lastName.
    */
   searchPaginated(params: { search?: string; skip: number; limit: number }): Promise<Paginated<User>>;
+  /** Кол-во пользователей, зарегистрированных строго до `date` — базовая точка для кумулятивного графика роста. */
+  countCreatedBefore(date: Date): Promise<number>;
+  /** Новые регистрации по дням начиная с `since` (включительно), для графика роста. Дни без регистраций не возвращаются. */
+  getDailyRegistrations(since: Date): Promise<Array<{ date: string; count: number }>>;
 }
 
 export interface IPlanRepository {

@@ -72,4 +72,22 @@ export class UserRepository implements IUserRepository {
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
   }
+
+  async countCreatedBefore(date: Date): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.createQueryBuilder('user').where('user.createdAt < :date', { date }).getCount();
+  }
+
+  async getDailyRegistrations(since: Date): Promise<Array<{ date: string; count: number }>> {
+    const repo = await this.getRepo();
+    const rows = await repo
+      .createQueryBuilder('user')
+      .select(`to_char(user.createdAt, 'YYYY-MM-DD')`, 'date')
+      .addSelect('COUNT(*)', 'count')
+      .where('user.createdAt >= :since', { since })
+      .groupBy(`to_char(user.createdAt, 'YYYY-MM-DD')`)
+      .getRawMany<{ date: string; count: string }>();
+
+    return rows.map((row) => ({ date: row.date, count: Number(row.count) }));
+  }
 }

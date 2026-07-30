@@ -60,6 +60,7 @@ describe('admin list/detail routes (users, payments, notifications, logs)', () =
     listNotificationLogsUseCase: fakeListNotificationLogsUseCase as never,
     listAuditLogsUseCase: fakeListAuditLogsUseCase as never,
     sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getUsersGrowthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

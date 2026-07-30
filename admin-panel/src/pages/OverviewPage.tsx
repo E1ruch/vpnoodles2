@@ -2,6 +2,7 @@ import { useOutletContext } from 'react-router-dom';
 import type { DashboardOutletContext } from './DashboardLayout';
 import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/StatCard';
+import { UsersGrowthChart } from '../components/UsersGrowthChart';
 import { IconBell, IconClock, IconFileText, IconLayers, IconServer, IconUsers } from '../components/icons';
 import { sumRevenue } from '../format';
 
@@ -71,6 +72,8 @@ export function OverviewPage() {
         <StatCard accent="green" label="Всего платежей" value={overview.paymentsCount} />
         <StatCard accent="rose" label="Доход всего" value={sumRevenue(overview.revenue.allTime)} />
       </section>
+
+      <UsersGrowthChart />
     </>
   );
 }

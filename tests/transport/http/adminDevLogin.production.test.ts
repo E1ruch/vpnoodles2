@@ -42,6 +42,7 @@ describe('admin dev-login (production: credentials set but NODE_ENV=production)'
     listNotificationLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     listAuditLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getUsersGrowthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: false regardless of configured credentials', async () => {

@@ -35,6 +35,7 @@ import { SendPaidExpiringRemindersUseCase } from '../application/usecases/SendPa
 import { DeactivateBlockedUserUseCase } from '../application/usecases/DeactivateBlockedUserUseCase.js';
 import { RestoreBlockedUserUseCase } from '../application/usecases/RestoreBlockedUserUseCase.js';
 import { GetAdminOverviewUseCase } from '../application/usecases/GetAdminOverviewUseCase.js';
+import { GetUsersGrowthUseCase } from '../application/usecases/GetUsersGrowthUseCase.js';
 import { ListUsersUseCase } from '../application/usecases/ListUsersUseCase.js';
 import { GetUserDetailUseCase } from '../application/usecases/GetUserDetailUseCase.js';
 import { ListPaymentsUseCase } from '../application/usecases/ListPaymentsUseCase.js';
@@ -71,6 +72,7 @@ export interface AppContainer {
   sendTrialExpiringRemindersUseCase: SendTrialExpiringRemindersUseCase;
   sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
+  getUsersGrowthUseCase: GetUsersGrowthUseCase;
   listUsersUseCase: ListUsersUseCase;
   getUserDetailUseCase: GetUserDetailUseCase;
   listPaymentsUseCase: ListPaymentsUseCase;
@@ -210,6 +212,7 @@ export function createContainer(): AppContainer {
     auditLogRepo,
     notificationLogRepo,
   );
+  const getUsersGrowthUseCase = new GetUsersGrowthUseCase(userRepo);
   const listUsersUseCase = new ListUsersUseCase(userRepo);
   const getUserDetailUseCase = new GetUserDetailUseCase(userRepo, subscriptionRepo, paymentRepo, auditLogRepo);
   const listPaymentsUseCase = new ListPaymentsUseCase(paymentRepo);
@@ -276,6 +279,7 @@ export function createContainer(): AppContainer {
     sendTrialExpiringRemindersUseCase,
     sendPaidExpiringRemindersUseCase,
     getAdminOverviewUseCase,
+    getUsersGrowthUseCase,
     listUsersUseCase,
     getUserDetailUseCase,
     listPaymentsUseCase,

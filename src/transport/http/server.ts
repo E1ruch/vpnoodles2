@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import type { Telegraf } from 'telegraf';
 import type { ICacheService, IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { GetAdminOverviewUseCase } from '../../application/usecases/GetAdminOverviewUseCase.js';
+import type { GetUsersGrowthUseCase } from '../../application/usecases/GetUsersGrowthUseCase.js';
 import type { ListUsersUseCase } from '../../application/usecases/ListUsersUseCase.js';
 import type { GetUserDetailUseCase } from '../../application/usecases/GetUserDetailUseCase.js';
 import type { ListPaymentsUseCase } from '../../application/usecases/ListPaymentsUseCase.js';
@@ -27,6 +28,7 @@ export interface AdminHttpServerDeps {
   cacheService: ICacheService;
   remnawaveService: IRemnawaveService;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
+  getUsersGrowthUseCase: GetUsersGrowthUseCase;
   listUsersUseCase: ListUsersUseCase;
   getUserDetailUseCase: GetUserDetailUseCase;
   listPaymentsUseCase: ListPaymentsUseCase;
@@ -84,7 +86,7 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
   app.use(
     '/api/overview',
     requireAdminAuth,
-    createOverviewRouter(deps.getAdminOverviewUseCase, deps.remnawaveService),
+    createOverviewRouter(deps.getAdminOverviewUseCase, deps.remnawaveService, deps.getUsersGrowthUseCase),
   );
   app.use(
     '/api/users',

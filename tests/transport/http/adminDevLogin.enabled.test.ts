@@ -52,6 +52,7 @@ describe('admin dev-login (enabled: NODE_ENV=development + credentials set)', ()
     listNotificationLogsUseCase: fakeUseCase as never,
     listAuditLogsUseCase: fakeUseCase as never,
     sendCustomNotificationUseCase: fakeUseCase as never,
+    getUsersGrowthUseCase: fakeUseCase as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: true', async () => {

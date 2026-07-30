@@ -139,6 +139,7 @@ async function bootstrap(): Promise<void> {
       cacheService: container.cacheService,
       remnawaveService: container.remnawaveService,
       getAdminOverviewUseCase: container.getAdminOverviewUseCase,
+      getUsersGrowthUseCase: container.getUsersGrowthUseCase,
       listUsersUseCase: container.listUsersUseCase,
       getUserDetailUseCase: container.getUserDetailUseCase,
       listPaymentsUseCase: container.listPaymentsUseCase,
