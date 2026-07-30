@@ -28,6 +28,7 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
+    async ping(): Promise<boolean> { return true; },
   };
 }
 
@@ -61,6 +62,7 @@ describe('admin list/detail routes (users, payments, notifications, logs)', () =
     listAuditLogsUseCase: fakeListAuditLogsUseCase as never,
     sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     getUsersGrowthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getSystemHealthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

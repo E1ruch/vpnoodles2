@@ -7,6 +7,7 @@ import type { Telegraf } from 'telegraf';
 import type { ICacheService, IRemnawaveService } from '../../domain/interfaces/services.js';
 import type { GetAdminOverviewUseCase } from '../../application/usecases/GetAdminOverviewUseCase.js';
 import type { GetUsersGrowthUseCase } from '../../application/usecases/GetUsersGrowthUseCase.js';
+import type { GetSystemHealthUseCase } from '../../application/usecases/GetSystemHealthUseCase.js';
 import type { ListUsersUseCase } from '../../application/usecases/ListUsersUseCase.js';
 import type { GetUserDetailUseCase } from '../../application/usecases/GetUserDetailUseCase.js';
 import type { ListPaymentsUseCase } from '../../application/usecases/ListPaymentsUseCase.js';
@@ -21,6 +22,7 @@ import { createPaymentsRouter } from './routes/payments.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createLogsRouter } from './routes/logs.js';
 import { createCustomNotificationsRouter } from './routes/customNotifications.js';
+import { createSystemHealthRouter } from './routes/systemHealth.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -29,6 +31,7 @@ export interface AdminHttpServerDeps {
   remnawaveService: IRemnawaveService;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
   getUsersGrowthUseCase: GetUsersGrowthUseCase;
+  getSystemHealthUseCase: GetSystemHealthUseCase;
   listUsersUseCase: ListUsersUseCase;
   getUserDetailUseCase: GetUserDetailUseCase;
   listPaymentsUseCase: ListPaymentsUseCase;
@@ -109,6 +112,11 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
     createNotificationsRouter(deps.listNotificationLogsUseCase),
   );
   app.use('/api/logs', requireAdminAuth, createLogsRouter(deps.listAuditLogsUseCase));
+  app.use(
+    '/api/system-health',
+    requireAdminAuth,
+    createSystemHealthRouter(deps.getSystemHealthUseCase),
+  );
 
   app.use(express.static(ADMIN_PANEL_DIST));
 

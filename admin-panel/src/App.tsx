@@ -7,6 +7,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { RevenuePage } from './pages/RevenuePage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { ServersPage } from './pages/ServersPage';
+import { MonitoringPage } from './pages/MonitoringPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationConstructorPage } from './pages/NotificationConstructorPage';
 import { LogsPage } from './pages/LogsPage';
@@ -44,6 +45,7 @@ function App() {
           <Route path="revenue" element={<RevenuePage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="servers" element={<ServersPage />} />
+          <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="notifications/constructor" element={<NotificationConstructorPage />} />
           <Route path="logs" element={<LogsPage />} />

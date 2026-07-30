@@ -94,8 +94,15 @@ export interface ICacheService {
    */
   acquireLock(key: string, ttlSeconds: number): Promise<boolean>;
   releaseLock(key: string): Promise<void>;
+  /** Проверка живости соединения (для виджета мониторинга) — true, если Redis ответил на PING. */
+  ping(): Promise<boolean>;
 }
 
 export interface IQRCodeService {
   generateBase64(data: string): Promise<string>;
+}
+
+export interface IDatabaseHealthService {
+  /** SELECT 1 с замером времени — для виджета мониторинга в админ-панели. */
+  ping(): Promise<{ ok: boolean; latencyMs: number }>;
 }

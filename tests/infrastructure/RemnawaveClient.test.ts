@@ -33,6 +33,7 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
+    async ping(): Promise<boolean> { return true; },
   };
 }
 

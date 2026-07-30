@@ -16,6 +16,7 @@ import { RedisCacheService } from '../infrastructure/cache/RedisCacheService.js'
 import { PaymentOrchestrator } from '../infrastructure/payments/PaymentOrchestrator.js';
 import { QRCodeService } from '../infrastructure/qrcode/QRCodeService.js';
 import { NotificationService } from '../infrastructure/notifications/NotificationService.js';
+import { DatabaseHealthService } from '../infrastructure/db/DatabaseHealthService.js';
 
 // Use cases
 import { RegisterUserUseCase } from '../application/usecases/RegisterUserUseCase.js';
@@ -36,6 +37,7 @@ import { DeactivateBlockedUserUseCase } from '../application/usecases/Deactivate
 import { RestoreBlockedUserUseCase } from '../application/usecases/RestoreBlockedUserUseCase.js';
 import { GetAdminOverviewUseCase } from '../application/usecases/GetAdminOverviewUseCase.js';
 import { GetUsersGrowthUseCase } from '../application/usecases/GetUsersGrowthUseCase.js';
+import { GetSystemHealthUseCase } from '../application/usecases/GetSystemHealthUseCase.js';
 import { ListUsersUseCase } from '../application/usecases/ListUsersUseCase.js';
 import { GetUserDetailUseCase } from '../application/usecases/GetUserDetailUseCase.js';
 import { ListPaymentsUseCase } from '../application/usecases/ListPaymentsUseCase.js';
@@ -61,6 +63,7 @@ export interface AppContainer {
   paymentService: PaymentOrchestrator;
   qrCodeService: QRCodeService;
   notificationService: NotificationService;
+  databaseHealthService: DatabaseHealthService;
 
   // Use cases
   registerUserUseCase: RegisterUserUseCase;
@@ -73,6 +76,7 @@ export interface AppContainer {
   sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
   getAdminOverviewUseCase: GetAdminOverviewUseCase;
   getUsersGrowthUseCase: GetUsersGrowthUseCase;
+  getSystemHealthUseCase: GetSystemHealthUseCase;
   listUsersUseCase: ListUsersUseCase;
   getUserDetailUseCase: GetUserDetailUseCase;
   listPaymentsUseCase: ListPaymentsUseCase;
@@ -105,6 +109,7 @@ export function createContainer(): AppContainer {
   const remnawaveService = new RemnawaveClient(cacheService);
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
+  const databaseHealthService = new DatabaseHealthService();
 
   const deactivateBlockedUserUseCase = new DeactivateBlockedUserUseCase(
     userRepo,
@@ -213,6 +218,12 @@ export function createContainer(): AppContainer {
     notificationLogRepo,
   );
   const getUsersGrowthUseCase = new GetUsersGrowthUseCase(userRepo);
+  const getSystemHealthUseCase = new GetSystemHealthUseCase(
+    bot,
+    cacheService,
+    remnawaveService,
+    databaseHealthService,
+  );
   const listUsersUseCase = new ListUsersUseCase(userRepo);
   const getUserDetailUseCase = new GetUserDetailUseCase(userRepo, subscriptionRepo, paymentRepo, auditLogRepo);
   const listPaymentsUseCase = new ListPaymentsUseCase(paymentRepo);
@@ -270,6 +281,7 @@ export function createContainer(): AppContainer {
     paymentService,
     qrCodeService,
     notificationService,
+    databaseHealthService,
     registerUserUseCase,
     activateTrialUseCase,
     getSubscriptionUseCase,
@@ -280,6 +292,7 @@ export function createContainer(): AppContainer {
     sendPaidExpiringRemindersUseCase,
     getAdminOverviewUseCase,
     getUsersGrowthUseCase,
+    getSystemHealthUseCase,
     listUsersUseCase,
     getUserDetailUseCase,
     listPaymentsUseCase,

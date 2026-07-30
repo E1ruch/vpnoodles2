@@ -64,4 +64,13 @@ export class RedisCacheService implements ICacheService {
   async disconnect(): Promise<void> {
     await this.client.quit();
   }
+
+  async ping(): Promise<boolean> {
+    try {
+      const result = await this.client.ping();
+      return result === 'PONG';
+    } catch {
+      return false;
+    }
+  }
 }

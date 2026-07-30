@@ -217,6 +217,36 @@ export function getUsersGrowth(days: 7 | 30 | 90): Promise<UsersGrowthResult> {
   return apiFetch(`/api/overview/users-growth?days=${days}`);
 }
 
+export type SystemStatus = 'ok' | 'warning' | 'critical';
+export type ComponentStatus = 'ok' | 'critical';
+
+export interface SystemComponentHealth {
+  name: 'postgres' | 'redis' | 'telegram_bot' | 'remnawave';
+  label: string;
+  status: ComponentStatus;
+  latencyMs: number | null;
+  message: string | null;
+}
+
+export interface SystemHealthResult {
+  status: SystemStatus;
+  checkedAt: string;
+  vps: {
+    cpuPercent: number;
+    loadAverage: [number, number, number];
+    memory: { usedBytes: number; totalBytes: number };
+    disk: { usedBytes: number; totalBytes: number };
+    uptimeSeconds: number;
+  };
+  components: SystemComponentHealth[];
+  warnings: string[];
+  recentErrors: Array<{ time: string; message: string }>;
+}
+
+export function getSystemHealth(): Promise<SystemHealthResult> {
+  return apiFetch('/api/system-health');
+}
+
 export function getUsers(params: { search?: string; page: number; pageSize: number }): Promise<Paginated<UserListEntry>> {
   const query = new URLSearchParams();
   if (params.search) query.set('search', params.search);

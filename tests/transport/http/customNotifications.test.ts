@@ -29,6 +29,7 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
+    async ping(): Promise<boolean> { return true; },
   };
 }
 
@@ -55,6 +56,7 @@ describe('customNotifications routes (/api/notifications/custom)', () => {
     listAuditLogsUseCase: fakeUseCase as never,
     sendCustomNotificationUseCase: fakeSendCustomNotificationUseCase as never,
     getUsersGrowthUseCase: fakeUseCase as never,
+    getSystemHealthUseCase: fakeUseCase as never,
   });
 
   let authCookie: string[];

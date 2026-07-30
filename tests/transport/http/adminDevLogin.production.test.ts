@@ -27,6 +27,7 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
+    async ping(): Promise<boolean> { return true; },
   };
 }
 
@@ -43,6 +44,7 @@ describe('admin dev-login (production: credentials set but NODE_ENV=production)'
     listAuditLogsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     sendCustomNotificationUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     getUsersGrowthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getSystemHealthUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: false regardless of configured credentials', async () => {

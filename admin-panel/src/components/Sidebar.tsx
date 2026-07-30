@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
+  IconActivity,
   IconBell,
   IconChevronDown,
   IconCreditCard,
@@ -28,6 +29,7 @@ const NAV_ITEMS: NavEntry[] = [
   { to: '/revenue', label: 'Доход', Icon: IconTrendingUp },
   { to: '/payments', label: 'Платежи', Icon: IconCreditCard },
   { to: '/servers', label: 'Серверы', Icon: IconServer },
+  { to: '/monitoring', label: 'Мониторинг', Icon: IconActivity, badge: 'new' },
   {
     label: 'Уведомления',
     Icon: IconBell,
@@ -110,11 +112,12 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             );
           }
 
-          const { to, label, Icon, end } = item;
+          const { to, label, Icon, end, badge } = item;
           return (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}>
               <Icon />
               <span>{label}</span>
+              {badge === 'new' && <span className="badge-new">новое</span>}
             </NavLink>
           );
         })}

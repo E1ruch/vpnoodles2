@@ -28,16 +28,18 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
-    async ping(): Promise<boolean> { return true; },
+    async ping(): Promise<boolean> {
+      return true;
+    },
   };
 }
 
-describe('overview routes — /api/overview/users-growth', () => {
+describe('system health routes — /api/system-health', () => {
   const cacheService = createFakeCache();
   const fakeBot = { telegram: { getMe: jest.fn().mockResolvedValue({ username: 'test_admin_bot' }) } };
   const fakeRemnawaveService = { getNodes: jest.fn().mockResolvedValue([]) };
   const fakeUseCase = { execute: jest.fn().mockResolvedValue({}) };
-  const fakeGetUsersGrowthUseCase = { execute: jest.fn() };
+  const fakeGetSystemHealthUseCase = { execute: jest.fn() };
 
   const app = createAdminHttpApp({
     bot: fakeBot as never,
@@ -50,8 +52,8 @@ describe('overview routes — /api/overview/users-growth', () => {
     listNotificationLogsUseCase: fakeUseCase as never,
     listAuditLogsUseCase: fakeUseCase as never,
     sendCustomNotificationUseCase: fakeUseCase as never,
-    getUsersGrowthUseCase: fakeGetUsersGrowthUseCase as never,
-    getSystemHealthUseCase: fakeUseCase as never,
+    getUsersGrowthUseCase: fakeUseCase as never,
+    getSystemHealthUseCase: fakeGetSystemHealthUseCase as never,
   });
 
   let authCookie: string[];
@@ -66,33 +68,25 @@ describe('overview routes — /api/overview/users-growth', () => {
   });
 
   it('requires a session', async () => {
-    const res = await request(app).get('/api/overview/users-growth?days=30');
+    const res = await request(app).get('/api/system-health');
     expect(res.status).toBe(401);
   });
 
-  it('forwards a valid days value to the use case', async () => {
-    fakeGetUsersGrowthUseCase.execute.mockResolvedValue({ days: 7, series: [] });
+  it('returns the use case result on success', async () => {
+    const snapshot = { status: 'ok', components: [], warnings: [], recentErrors: [] };
+    fakeGetSystemHealthUseCase.execute.mockResolvedValue(snapshot);
 
-    const res = await request(app).get('/api/overview/users-growth?days=7').set('Cookie', authCookie);
+    const res = await request(app).get('/api/system-health').set('Cookie', authCookie);
 
     expect(res.status).toBe(200);
-    expect(fakeGetUsersGrowthUseCase.execute).toHaveBeenCalledWith(7);
-    expect(res.body).toEqual({ days: 7, series: [] });
+    expect(res.body).toEqual(snapshot);
   });
 
-  it('defaults to 30 days when the param is missing', async () => {
-    fakeGetUsersGrowthUseCase.execute.mockResolvedValue({ days: 30, series: [] });
+  it('returns 500 when the use case throws', async () => {
+    fakeGetSystemHealthUseCase.execute.mockRejectedValue(new Error('boom'));
 
-    await request(app).get('/api/overview/users-growth').set('Cookie', authCookie);
+    const res = await request(app).get('/api/system-health').set('Cookie', authCookie);
 
-    expect(fakeGetUsersGrowthUseCase.execute).toHaveBeenCalledWith(30);
-  });
-
-  it('falls back to 30 days for an out-of-whitelist value instead of forwarding it', async () => {
-    fakeGetUsersGrowthUseCase.execute.mockResolvedValue({ days: 30, series: [] });
-
-    await request(app).get('/api/overview/users-growth?days=365').set('Cookie', authCookie);
-
-    expect(fakeGetUsersGrowthUseCase.execute).toHaveBeenCalledWith(30);
+    expect(res.status).toBe(500);
   });
 });

@@ -32,6 +32,7 @@ function createFakeCache(): ICacheService {
       return true;
     },
     async releaseLock(): Promise<void> {},
+    async ping(): Promise<boolean> { return true; },
   };
 }
 
@@ -53,6 +54,7 @@ describe('admin dev-login (enabled: NODE_ENV=development + credentials set)', ()
     listAuditLogsUseCase: fakeUseCase as never,
     sendCustomNotificationUseCase: fakeUseCase as never,
     getUsersGrowthUseCase: fakeUseCase as never,
+    getSystemHealthUseCase: fakeUseCase as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: true', async () => {
