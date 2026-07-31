@@ -147,6 +147,10 @@ async function bootstrap(): Promise<void> {
       listNotificationLogsUseCase: container.listNotificationLogsUseCase,
       listAuditLogsUseCase: container.listAuditLogsUseCase,
       sendCustomNotificationUseCase: container.sendCustomNotificationUseCase,
+      getReferralOverviewUseCase: container.getReferralOverviewUseCase,
+      getTopReferrersUseCase: container.getTopReferrersUseCase,
+      listReferralRewardsUseCase: container.listReferralRewardsUseCase,
+      referralSettingsService: container.referralSettingsService,
     });
     const adminServer = adminApp.listen(env.ADMIN_PORT, () => {
       logger.info({ port: env.ADMIN_PORT }, 'Admin HTTP server started');

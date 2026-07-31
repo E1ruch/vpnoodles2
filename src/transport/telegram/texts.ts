@@ -41,7 +41,7 @@ export const Texts = {
 
 💎 Платные тарифы — для постоянного использования
 • Безлимитный трафик
-• До 5 устройств
+• До 10 устройств
 • Выгодные цены
 • Приоритетная поддержка
 
@@ -135,9 +135,10 @@ export const Texts = {
   PROFILE:
     '👤 **Ваш профиль**\n\n🆔 Telegram ID: `' +
     '{telegramId}' +
-    '`\n👤 Имя: {firstName}\n📊 Статус: {status}\n📅 С нами с: {regDate}\n{devicesLine}\n\n💡 Нужна помощь? Напишите в поддержку!',
+    '`\n👤 Имя: {firstName}\n📊 Статус: {status}\n📅 С нами с: {regDate}\n{devicesLine}{referralLine}\n\n💡 Нужна помощь? Напишите в поддержку!',
 
   PROFILE_DEVICES_LINE: '\n📱 Устройств: {usedDevices} из {deviceLimit}',
+  PROFILE_REFERRAL_LINE: '\n🎁 Приглашено друзей: {invitedCount}',
 
   // Devices
   DEVICES_NO_SUBSCRIPTION: `📱 **Подключённые устройства**
@@ -230,7 +231,12 @@ export const Texts = {
 
 📱 Нажмите на ссылку — она откроется в VPN-приложении, останется подтвердить добавление.
 
-Нужен QR-код для другого устройства или пошаговая инструкция? Кнопки ниже 👇`,
+Нужен QR-код для другого устройства или пошаговая инструкция? Кнопки ниже 👇{referralPerkLine}{referralPromoLine}`,
+
+  // Реферальная программа — добавка-приглашение к SUBSCRIPTION_DELIVERED (§6.1 плана).
+  // Строка с личным бонусом самого получателя переиспользует REFERRAL_SIGNUP_PERK_LINE_DAYS/TRAFFIC ниже.
+  SUBSCRIPTION_DELIVERED_REFERRAL_PROMO:
+    '\n\nКстати — пригласите друга и получите бонус, когда он подключится 🎁',
 
   PAYMENT_FAILED: `❌ Платёж не прошёл
 
@@ -314,4 +320,43 @@ export const Texts = {
 ⏳ Осталось: {daysLeft} дн.
 
 Чтобы VPN не прервался — продлите подписку. Выберите тариф и оплатите в пару кликов 👇`,
+
+  // Реферальная программа (docs/referral-program-plan.md §6.3/§6.4).
+  REFERRAL_SIGNUP_REWARD_DAYS: `🎉 Ваш друг {firstName} подключил бесплатный VPN! Вам начислено {days} дн.`,
+  REFERRAL_SIGNUP_REWARD_TRAFFIC: `🎉 Ваш друг {firstName} подключил бесплатный VPN! Вам начислено +{trafficGb} ГБ/день трафика.`,
+  REFERRAL_CONVERSION_REWARD: `🎉 Ваш друг {firstName} оплатил подписку! Вам начислено {days} дней{trafficClause}.`,
+  REFERRAL_CONVERSION_TRAFFIC_CLAUSE: ' и +{trafficGb} ГБ/день трафика навсегда',
+  REFERRAL_PENDING_REWARD: `🎉 Друг {firstName} принёс вам бонус ({days} дн.) — активируйте VPN (🌐 Мой VPN), чтобы получить его!`,
+  REFERRAL_MILESTONE_REWARD: `🏆 {convertedCount} друзей оплатили подписку по вашей ссылке! Бонус: +{bonusDays} дней.`,
+  REFERRAL_SIGNUP_PERK_LINE_DAYS: '\n\n🎁 +{days} дней — бонус за переход по ссылке друга!',
+  REFERRAL_SIGNUP_PERK_LINE_TRAFFIC: '\n\n🎁 +{trafficGb} ГБ/день — бонус за переход по ссылке друга!',
+
+  // Экран "Реферальная программа" (§6.2 плана). Строки шагов 2/3 и итоговая статистика
+  // подставляются вызывающим кодом (ReferralHandlers) в зависимости от режима начисления
+  // (дни/трафик), выбранного в ReferralSettings — здесь только каркас с плейсхолдерами.
+  REFERRAL_PROGRAM: `🎁 Приглашайте друзей — получайте VPN бесплатно!
+
+Как это работает:
+1️⃣ Отправьте другу вашу персональную ссылку
+2️⃣ Друг активирует пробный период — и сразу получает {signupPerkLine}
+3️⃣ Вы получаете {referrerSignupLine}, как только друг подключится
+4️⃣ Когда друг оплатит любой тариф — вам начислится +{conversionDays} дней{conversionTrafficClause}
+
+💎 Пригласили того, кто тоже кого-то пригласил? Получите ещё несколько дней с каждой такой оплаты — бонус растёт сам!
+{milestonesBlock}
+📊 Ваша статистика:
+👥 Приглашено: {invitedCount}
+✅ Оплатили подписку: {convertedCount}
+🎉 Всего начислено: {totalDaysGranted} дн. и {totalTrafficGranted} ГБ/день
+{pendingClaimLine}
+🔗 Ваша ссылка:
+{referralLink}`,
+
+  REFERRAL_PROGRAM_MILESTONE_ROW: '• {convertedCount} друзей — +{bonusDays} дней',
+  REFERRAL_PROGRAM_MILESTONE_PROGRESS: 'Осталось пригласить ещё {remaining} друзей до следующего бонуса!',
+  REFERRAL_PROGRAM_PENDING_LINE:
+    '⏳ Ждут получения: {pendingDays} дн. — активируйте VPN, чтобы забрать!\n',
+  REFERRAL_PROGRAM_DISABLED: 'ℹ️ Реферальная программа сейчас временно отключена. Загляните позже!',
+  REFERRAL_SHARE_PITCH:
+    'Пользуюсь этим VPN — быстро и без сбоев. Подключайся по моей ссылке, получишь бонус к пробному периоду 👇',
 } as const;

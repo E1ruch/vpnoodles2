@@ -54,6 +54,10 @@ describe('system health routes — /api/system-health', () => {
     sendCustomNotificationUseCase: fakeUseCase as never,
     getUsersGrowthUseCase: fakeUseCase as never,
     getSystemHealthUseCase: fakeGetSystemHealthUseCase as never,
+    getReferralOverviewUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getTopReferrersUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    listReferralRewardsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    referralSettingsService: { get: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

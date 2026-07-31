@@ -14,6 +14,10 @@ import type { ListPaymentsUseCase } from '../../application/usecases/ListPayment
 import type { ListNotificationLogsUseCase } from '../../application/usecases/ListNotificationLogsUseCase.js';
 import type { ListAuditLogsUseCase } from '../../application/usecases/ListAuditLogsUseCase.js';
 import type { SendCustomNotificationUseCase } from '../../application/usecases/SendCustomNotificationUseCase.js';
+import type { GetReferralOverviewUseCase } from '../../application/usecases/referral/GetReferralOverviewUseCase.js';
+import type { GetTopReferrersUseCase } from '../../application/usecases/referral/GetTopReferrersUseCase.js';
+import type { ListReferralRewardsUseCase } from '../../application/usecases/referral/ListReferralRewardsUseCase.js';
+import type { ReferralSettingsService } from '../../application/usecases/referral/ReferralSettingsService.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createOverviewRouter } from './routes/overview.js';
@@ -23,6 +27,7 @@ import { createNotificationsRouter } from './routes/notifications.js';
 import { createLogsRouter } from './routes/logs.js';
 import { createCustomNotificationsRouter } from './routes/customNotifications.js';
 import { createSystemHealthRouter } from './routes/systemHealth.js';
+import { createReferralsRouter } from './routes/referrals.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -38,6 +43,10 @@ export interface AdminHttpServerDeps {
   listNotificationLogsUseCase: ListNotificationLogsUseCase;
   listAuditLogsUseCase: ListAuditLogsUseCase;
   sendCustomNotificationUseCase: SendCustomNotificationUseCase;
+  getReferralOverviewUseCase: GetReferralOverviewUseCase;
+  getTopReferrersUseCase: GetTopReferrersUseCase;
+  listReferralRewardsUseCase: ListReferralRewardsUseCase;
+  referralSettingsService: ReferralSettingsService;
 }
 
 /** dist/transport/http (компилированный, CommonJS — __dirname доступен нативно) → ../../../admin-panel/dist в корне репо. */
@@ -116,6 +125,16 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
     '/api/system-health',
     requireAdminAuth,
     createSystemHealthRouter(deps.getSystemHealthUseCase),
+  );
+  app.use(
+    '/api/referrals',
+    requireAdminAuth,
+    createReferralsRouter({
+      getReferralOverview: deps.getReferralOverviewUseCase,
+      getTopReferrers: deps.getTopReferrersUseCase,
+      listReferralRewards: deps.listReferralRewardsUseCase,
+      referralSettings: deps.referralSettingsService,
+    }),
   );
 
   app.use(express.static(ADMIN_PANEL_DIST));

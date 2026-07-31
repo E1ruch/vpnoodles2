@@ -1,7 +1,13 @@
+import { randomInt } from 'crypto';
 import { In, Repository } from 'typeorm';
 import { getDataSource } from '../connection.js';
 import { User } from '../../../domain/entities/User.js';
 import type { IUserRepository, Paginated } from '../../../domain/interfaces/repositories.js';
+
+const REFERRAL_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const REFERRAL_CODE_LENGTH = 8;
+const REFERRAL_CODE_GENERATION_ATTEMPTS = 5;
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 export class UserRepository implements IUserRepository {
   private getRepo(): Promise<Repository<User>> {
@@ -89,5 +95,44 @@ export class UserRepository implements IUserRepository {
       .getRawMany<{ date: string; count: string }>();
 
     return rows.map((row) => ({ date: row.date, count: Number(row.count) }));
+  }
+
+  async findByReferralCode(code: string): Promise<User | null> {
+    const repo = await this.getRepo();
+    return repo.findOne({ where: { referralCode: code } });
+  }
+
+  async getOrCreateReferralCode(userId: string): Promise<string> {
+    const repo = await this.getRepo();
+    const user = await repo.findOne({ where: { id: userId } });
+    if (!user) throw new Error(`User not found: ${userId}`);
+    if (user.referralCode) return user.referralCode;
+
+    for (let attempt = 1; attempt <= REFERRAL_CODE_GENERATION_ATTEMPTS; attempt++) {
+      const code = this.generateReferralCode();
+      try {
+        await repo.update(userId, { referralCode: code });
+        return code;
+      } catch (error) {
+        const isUniqueViolation = (error as { code?: string })?.code === POSTGRES_UNIQUE_VIOLATION;
+        if (!isUniqueViolation || attempt === REFERRAL_CODE_GENERATION_ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Failed to generate a unique referral code');
+  }
+
+  async countReferredBy(userId: string): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count({ where: { referredByUserId: userId } });
+  }
+
+  private generateReferralCode(): string {
+    let code = '';
+    for (let i = 0; i < REFERRAL_CODE_LENGTH; i++) {
+      code += REFERRAL_CODE_CHARS[randomInt(REFERRAL_CODE_CHARS.length)];
+    }
+    return code;
   }
 }

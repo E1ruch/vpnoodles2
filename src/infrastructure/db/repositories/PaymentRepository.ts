@@ -71,6 +71,11 @@ export class PaymentRepository implements IPaymentRepository {
     return repo.findOne({ where: { userId, planId, status: 'completed' } });
   }
 
+  async countCompletedByUserId(userId: string): Promise<number> {
+    const repo = await this.getRepo();
+    return repo.count({ where: { userId, status: 'completed' } });
+  }
+
   async getRevenueSummary(): Promise<RevenueSummary> {
     const repo = await this.getRepo();
 

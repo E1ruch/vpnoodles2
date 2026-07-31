@@ -7,6 +7,7 @@ import type {
   IAuditLogRepository,
 } from '../../../domain/interfaces/repositories.js';
 import type { IPaymentService } from '../../../domain/interfaces/services.js';
+import type { ReferralSettingsService } from '../../../application/usecases/referral/ReferralSettingsService.js';
 import { getLogger } from '../../../shared/logger/index.js';
 import { isAppError, PaymentLockedError } from '../../../shared/errors/index.js';
 import { formatCurrency } from '../../../shared/utils/index.js';
@@ -39,6 +40,7 @@ export class PaymentHandlers {
     private auditLogRepo: IAuditLogRepository,
     private paymentService: IPaymentService,
     private purchasePlan: PurchasePlanUseCase,
+    private referralSettings: ReferralSettingsService,
   ) {
     this.yooKassaService = new YooKassaService();
   }
@@ -520,7 +522,18 @@ export class PaymentHandlers {
           `${provider}_${paymentId}`,
       });
 
-      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl);
+      // Покупка уже успешно проведена — сбой чтения реферальных настроек не должен
+      // превратить успешную оплату в сообщение об ошибке, поэтому отдельный try/catch.
+      let referralPromoEnabled = false;
+      try {
+        referralPromoEnabled = (await this.referralSettings.get()).enabled;
+      } catch (err) {
+        getLogger().error({ err }, 'Failed to read referral settings for delivery message');
+      }
+
+      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl, {
+        promoEnabled: referralPromoEnabled,
+      });
 
       await this.auditLogRepo.create({
         userId: user.id,

@@ -52,6 +52,10 @@ describe('overview routes — /api/overview/users-growth', () => {
     sendCustomNotificationUseCase: fakeUseCase as never,
     getUsersGrowthUseCase: fakeGetUsersGrowthUseCase as never,
     getSystemHealthUseCase: fakeUseCase as never,
+    getReferralOverviewUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    getTopReferrersUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    listReferralRewardsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    referralSettingsService: { get: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

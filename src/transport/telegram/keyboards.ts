@@ -1,20 +1,32 @@
 import { InlineKeyboardMarkup } from 'telegraf/types';
 import type { Plan } from '../../domain/entities/Plan.js';
 import { formatCurrency } from '../../shared/utils/index.js';
+import { Texts } from './texts.js';
 
-export function mainMenuKeyboard(): InlineKeyboardMarkup {
-  return {
-    inline_keyboard: [
-      [
-        { text: '🌐 Мой VPN', callback_data: 'my_vpn' },
-        { text: '💎 Тарифы', callback_data: 'plans' },
-      ],
-      [
-        { text: '👤 Профиль', callback_data: 'profile' },
-        { text: '💬 Поддержка', callback_data: 'support' },
-      ],
+/**
+ * `showReferral` по умолчанию true — большинство мест, откуда зовётся эта клавиатура,
+ * ещё не знают про реферальную программу и передавать флаг не будут (см. CLAUDE.md:
+ * не трогаем то, что не обязаны). Вызовы, которым известно состояние
+ * ReferralSettings.enabled (handleStart/handleBackMain/handleProfile в handlers.ts),
+ * передают его явно — это и есть "рубильник прячет кнопки" из §7.4 плана.
+ */
+export function mainMenuKeyboard(showReferral: boolean = true): InlineKeyboardMarkup {
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [
+    [
+      { text: '🌐 Мой VPN', callback_data: 'my_vpn' },
+      { text: '💎 Тарифы', callback_data: 'plans' },
     ],
-  };
+    [
+      { text: '👤 Профиль', callback_data: 'profile' },
+      { text: '💬 Поддержка', callback_data: 'support' },
+    ],
+  ];
+
+  if (showReferral) {
+    rows.push([{ text: '🎁 Пригласить друзей', callback_data: 'referral_program' }]);
+  }
+
+  return { inline_keyboard: rows };
 }
 
 export function restoreAccessKeyboard(): InlineKeyboardMarkup {
@@ -139,6 +151,7 @@ export function vpnActionsKeyboard(
   subscriptionId: string,
   isExpired: boolean,
   showRenewButton: boolean = false,
+  showReferralPromo: boolean = false,
 ): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
@@ -150,6 +163,11 @@ export function vpnActionsKeyboard(
     { text: '📷 QR-код', callback_data: 'show_qr' },
     { text: '📖 Инструкция', callback_data: 'instructions' },
   ]);
+
+  if (showReferralPromo) {
+    buttons.push([{ text: '🎁 Пригласить друзей', callback_data: 'referral_program' }]);
+  }
+
   buttons.push([{ text: 'Назад', callback_data: 'back_main' }]);
 
   return { inline_keyboard: buttons };
@@ -192,10 +210,27 @@ export function backToMainKeyboard(): InlineKeyboardMarkup {
   };
 }
 
-export function profileKeyboard(): InlineKeyboardMarkup {
+export function profileKeyboard(showReferral: boolean = true): InlineKeyboardMarkup {
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [[{ text: '📱 Устройства', callback_data: 'devices' }]];
+
+  if (showReferral) {
+    rows.push([{ text: '🎁 Рефералы', callback_data: 'referral_program' }]);
+  }
+
+  rows.push([{ text: 'Назад', callback_data: 'back_main' }]);
+
+  return { inline_keyboard: rows };
+}
+
+/** Кнопка использует нативный share-sheet Телеграма (t.me/share/url) — ниже трения, чем "скопируйте ссылку". */
+export function referralProgramKeyboard(referralLink: string): InlineKeyboardMarkup {
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(
+    Texts.REFERRAL_SHARE_PITCH,
+  )}`;
+
   return {
     inline_keyboard: [
-      [{ text: '📱 Устройства', callback_data: 'devices' }],
+      [{ text: '📤 Поделиться с другом', url: shareUrl }],
       [{ text: 'Назад', callback_data: 'back_main' }],
     ],
   };

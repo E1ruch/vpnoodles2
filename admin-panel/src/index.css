@@ -775,6 +775,45 @@ button[type='submit']:hover {
   color: var(--text-h);
 }
 
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.settings-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-hover);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.settings-section-heading h3 {
+  margin: 0 0 4px;
+}
+.settings-section-heading .hint {
+  font-size: 13px;
+}
+.settings-section-chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  transition: transform 0.15s;
+  color: var(--text);
+}
+.settings-section-chevron.open {
+  transform: rotate(180deg);
+}
+.settings-section-body {
+  padding: 14px;
+  border-top: 1px solid var(--border);
+}
+
 .constructor-textarea {
   width: 100%;
   font: inherit;

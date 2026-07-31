@@ -4,7 +4,7 @@ import { ApiError, getUser, type UserDetail } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/StatCard';
 import { IconClock, IconLayers, IconUsers } from '../components/icons';
-import { formatAction } from '../labels';
+import { formatAction, formatReferralRewardType } from '../labels';
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status}`}>{status}</span>;
@@ -62,6 +62,67 @@ export function UserDetailPage() {
               value={new Date(user.createdAt).toLocaleDateString('ru-RU')}
               sub={user.hasUsedTrial ? 'trial использован' : 'trial не использован'}
             />
+          </section>
+
+          <section className="card">
+            <h2>Рефералы</h2>
+            <p className="hint">
+              {user.referral.referredByUserId ? (
+                <>
+                  Приглашён пользователем{' '}
+                  <Link className="user-link" to={`/users/${user.referral.referredByUserId}`}>
+                    {user.referral.referredByLabel}
+                  </Link>
+                </>
+              ) : (
+                'Не был приглашён по реферальной ссылке.'
+              )}
+              {' · '}Пригласил друзей: {user.referral.invitedCount}
+            </p>
+            {user.referral.rewards.length === 0 ? (
+              <p className="hint">Начислений пока нет.</p>
+            ) : (
+              <div className="table-scroll">
+                <table className="payments-table">
+                  <thead>
+                    <tr>
+                      <th>Тип</th>
+                      <th>Реферер</th>
+                      <th>Реферал</th>
+                      <th>Начислено</th>
+                      <th>Статус</th>
+                      <th>Дата</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {user.referral.rewards.map((reward) => (
+                      <tr key={reward.id}>
+                        <td>{formatReferralRewardType(reward.rewardType)}</td>
+                        <td>
+                          <Link className="user-link" to={`/users/${reward.referrerUserId}`}>
+                            {reward.referrerLabel}
+                          </Link>
+                        </td>
+                        <td>
+                          <Link className="user-link" to={`/users/${reward.referredUserId}`}>
+                            {reward.referredLabel}
+                          </Link>
+                        </td>
+                        <td>
+                          {reward.daysGranted > 0 ? `${reward.daysGranted} дн.` : ''}
+                          {reward.daysGranted > 0 && reward.trafficGbGranted > 0 ? ' + ' : ''}
+                          {reward.trafficGbGranted > 0 ? `${reward.trafficGbGranted} ГБ/день` : ''}
+                        </td>
+                        <td>
+                          <StatusBadge status={reward.status} />
+                        </td>
+                        <td>{new Date(reward.createdAt).toLocaleString('ru-RU')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="card">

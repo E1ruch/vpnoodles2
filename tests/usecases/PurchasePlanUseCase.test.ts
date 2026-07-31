@@ -24,6 +24,7 @@ const mockSubscriptionRepo = {
 
 const mockPaymentRepo = {
   findById: jest.fn(),
+  countCompletedByUserId: jest.fn().mockResolvedValue(0),
 };
 
 const mockAuditLogRepo = {
@@ -55,11 +56,20 @@ const mockSyncSubscriptionDevices = {
   execute: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockReferralRewardService = {
+  processConversionRewards: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockClaimPendingReferralRewards = {
+  execute: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('PurchasePlanUseCase — fulfillment lock', () => {
   let useCase: PurchasePlanUseCase;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPaymentRepo.countCompletedByUserId.mockResolvedValue(0);
     useCase = new PurchasePlanUseCase(
       mockUserRepo as never,
       mockPlanRepo as never,
@@ -70,6 +80,8 @@ describe('PurchasePlanUseCase — fulfillment lock', () => {
       mockPaymentService as never,
       mockQrCodeService as never,
       mockSyncSubscriptionDevices as never,
+      mockReferralRewardService as never,
+      mockClaimPendingReferralRewards as never,
     );
   });
 

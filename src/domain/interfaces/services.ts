@@ -44,6 +44,8 @@ export interface IRemnawaveService {
   ): Promise<{ expireAt: Date; status: 'active' | 'expired' } | null>;
   /** GET /api/users/{uuid} → expireAt. */
   getUserExpireAt(remnawaveUserUuid: string): Promise<Date | null>;
+  /** GET /api/users/{uuid} → trafficLimitBytes (0 = безлимит). Для реферальных начислений трафика. */
+  getUserTrafficLimitBytes(remnawaveUserUuid: string): Promise<number | null>;
   /** GET /api/hwid/devices/{userUuid} → response.total (количество устройств). */
   getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number>;
   /** GET /api/hwid/devices/{userUuid} → список устройств. */

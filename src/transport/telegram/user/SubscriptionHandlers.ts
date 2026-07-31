@@ -8,6 +8,7 @@ import type {
   ISubscriptionRepository,
 } from '../../../domain/interfaces/repositories.js';
 import type { IQRCodeService } from '../../../domain/interfaces/services.js';
+import type { ReferralSettingsService } from '../../../application/usecases/referral/ReferralSettingsService.js';
 import { getLogger } from '../../../shared/logger/index.js';
 import { isAppError } from '../../../shared/errors/index.js';
 import { formatDate } from '../../../shared/utils/index.js';
@@ -36,6 +37,7 @@ export class SubscriptionHandlers {
     private activateTrial: ActivateTrialUseCase,
     private renewSubscription: RenewSubscriptionUseCase,
     private qrCodeService: IQRCodeService,
+    private referralSettings: ReferralSettingsService,
   ) {}
 
   register(bot: Telegraf): void {
@@ -148,7 +150,19 @@ export class SubscriptionHandlers {
         // не критично, просто останется рядом с новым сообщением о выдаче подписки.
       }
 
-      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl);
+      // Trial уже успешно выдан — сбой чтения реферальных настроек не должен превратить
+      // успешную выдачу в сообщение об ошибке, поэтому это отдельный try/catch.
+      let referralPromoEnabled = false;
+      try {
+        referralPromoEnabled = (await this.referralSettings.get()).enabled;
+      } catch (err) {
+        logger.error({ err }, 'Failed to read referral settings for delivery message');
+      }
+
+      await sendSubscriptionDelivered(ctx.telegram, telegramUser.id, result.subscriptionId, result.subscriptionUrl, {
+        perkApplied: result.referralPerkApplied,
+        promoEnabled: referralPromoEnabled,
+      });
     } catch (err) {
       logger.error({ err }, 'Error activating trial');
       if (isAppError(err)) {

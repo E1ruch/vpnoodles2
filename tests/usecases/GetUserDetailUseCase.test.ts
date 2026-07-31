@@ -2,6 +2,8 @@ import { GetUserDetailUseCase } from '../../src/application/usecases/GetUserDeta
 
 const mockUserRepo = {
   findById: jest.fn(),
+  countReferredBy: jest.fn().mockResolvedValue(0),
+  findByIds: jest.fn().mockResolvedValue([]),
 };
 const mockSubscriptionRepo = {
   findByUserId: jest.fn(),
@@ -12,17 +14,24 @@ const mockPaymentRepo = {
 const mockAuditLogRepo = {
   findByUserId: jest.fn(),
 };
+const mockReferralRewardRepo = {
+  findByReferrer: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+};
 
 describe('GetUserDetailUseCase', () => {
   let useCase: GetUserDetailUseCase;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUserRepo.countReferredBy.mockResolvedValue(0);
+    mockUserRepo.findByIds.mockResolvedValue([]);
+    mockReferralRewardRepo.findByReferrer.mockResolvedValue({ items: [], total: 0 });
     useCase = new GetUserDetailUseCase(
       mockUserRepo as never,
       mockSubscriptionRepo as never,
       mockPaymentRepo as never,
       mockAuditLogRepo as never,
+      mockReferralRewardRepo as never,
     );
   });
 
@@ -35,6 +44,7 @@ describe('GetUserDetailUseCase', () => {
     expect(mockSubscriptionRepo.findByUserId).not.toHaveBeenCalled();
     expect(mockPaymentRepo.findByUserId).not.toHaveBeenCalled();
     expect(mockAuditLogRepo.findByUserId).not.toHaveBeenCalled();
+    expect(mockReferralRewardRepo.findByReferrer).not.toHaveBeenCalled();
   });
 
   it('aggregates profile, subscriptions, payments and recent actions for an existing user', async () => {
@@ -48,6 +58,7 @@ describe('GetUserDetailUseCase', () => {
       isActive: true,
       hasUsedTrial: true,
       createdAt: new Date('2026-01-01'),
+      referredByUserId: null,
     });
     mockSubscriptionRepo.findByUserId.mockResolvedValue([
       {
@@ -97,6 +108,7 @@ describe('GetUserDetailUseCase', () => {
       isActive: true,
       hasUsedTrial: true,
       createdAt: new Date('2026-01-01'),
+      referral: { referredByUserId: null, referredByLabel: null, invitedCount: 0, rewards: [] },
       subscriptions: [
         {
           id: 's1',

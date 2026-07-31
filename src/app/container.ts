@@ -9,6 +9,8 @@ import { SubscriptionRepository } from '../infrastructure/db/repositories/Subscr
 import { PaymentRepository } from '../infrastructure/db/repositories/PaymentRepository.js';
 import { AuditLogRepository } from '../infrastructure/db/repositories/AuditLogRepository.js';
 import { NotificationLogRepository } from '../infrastructure/db/repositories/NotificationLogRepository.js';
+import { ReferralRewardRepository } from '../infrastructure/db/repositories/ReferralRewardRepository.js';
+import { ReferralSettingsRepository } from '../infrastructure/db/repositories/ReferralSettingsRepository.js';
 
 // Services
 import { RemnawaveClient } from '../infrastructure/remnawave/RemnawaveClient.js';
@@ -44,6 +46,12 @@ import { ListPaymentsUseCase } from '../application/usecases/ListPaymentsUseCase
 import { ListNotificationLogsUseCase } from '../application/usecases/ListNotificationLogsUseCase.js';
 import { ListAuditLogsUseCase } from '../application/usecases/ListAuditLogsUseCase.js';
 import { SendCustomNotificationUseCase } from '../application/usecases/SendCustomNotificationUseCase.js';
+import { ReferralSettingsService } from '../application/usecases/referral/ReferralSettingsService.js';
+import { ReferralRewardService } from '../application/usecases/referral/ReferralRewardService.js';
+import { ClaimPendingReferralRewardsUseCase } from '../application/usecases/referral/ClaimPendingReferralRewardsUseCase.js';
+import { GetReferralOverviewUseCase } from '../application/usecases/referral/GetReferralOverviewUseCase.js';
+import { GetTopReferrersUseCase } from '../application/usecases/referral/GetTopReferrersUseCase.js';
+import { ListReferralRewardsUseCase } from '../application/usecases/referral/ListReferralRewardsUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -56,6 +64,8 @@ export interface AppContainer {
   paymentRepo: PaymentRepository;
   auditLogRepo: AuditLogRepository;
   notificationLogRepo: NotificationLogRepository;
+  referralRewardRepo: ReferralRewardRepository;
+  referralSettingsRepo: ReferralSettingsRepository;
 
   // Services
   remnawaveService: RemnawaveClient;
@@ -64,6 +74,8 @@ export interface AppContainer {
   qrCodeService: QRCodeService;
   notificationService: NotificationService;
   databaseHealthService: DatabaseHealthService;
+  referralSettingsService: ReferralSettingsService;
+  referralRewardService: ReferralRewardService;
 
   // Use cases
   registerUserUseCase: RegisterUserUseCase;
@@ -71,6 +83,7 @@ export interface AppContainer {
   getSubscriptionUseCase: GetSubscriptionUseCase;
   purchasePlanUseCase: PurchasePlanUseCase;
   renewSubscriptionUseCase: RenewSubscriptionUseCase;
+  claimPendingReferralRewardsUseCase: ClaimPendingReferralRewardsUseCase;
   sendNoSubscriptionRemindersUseCase: SendNoSubscriptionRemindersUseCase;
   sendTrialExpiringRemindersUseCase: SendTrialExpiringRemindersUseCase;
   sendPaidExpiringRemindersUseCase: SendPaidExpiringRemindersUseCase;
@@ -83,6 +96,9 @@ export interface AppContainer {
   listNotificationLogsUseCase: ListNotificationLogsUseCase;
   listAuditLogsUseCase: ListAuditLogsUseCase;
   sendCustomNotificationUseCase: SendCustomNotificationUseCase;
+  getReferralOverviewUseCase: GetReferralOverviewUseCase;
+  getTopReferrersUseCase: GetTopReferrersUseCase;
+  listReferralRewardsUseCase: ListReferralRewardsUseCase;
 
   // Bot
   bot: Telegraf;
@@ -103,6 +119,8 @@ export function createContainer(): AppContainer {
   const paymentRepo = new PaymentRepository();
   const auditLogRepo = new AuditLogRepository();
   const notificationLogRepo = new NotificationLogRepository();
+  const referralRewardRepo = new ReferralRewardRepository();
+  const referralSettingsRepo = new ReferralSettingsRepository();
 
   // Services
   const cacheService = new RedisCacheService();
@@ -110,6 +128,7 @@ export function createContainer(): AppContainer {
   const paymentService = new PaymentOrchestrator(paymentRepo, cacheService);
   const qrCodeService = new QRCodeService();
   const databaseHealthService = new DatabaseHealthService();
+  const referralSettingsService = new ReferralSettingsService(referralSettingsRepo, cacheService);
 
   const deactivateBlockedUserUseCase = new DeactivateBlockedUserUseCase(
     userRepo,
@@ -140,7 +159,30 @@ export function createContainer(): AppContainer {
   );
 
   // Use cases
-  const registerUserUseCase = new RegisterUserUseCase(userRepo, auditLogRepo);
+  const renewSubscriptionUseCase = new RenewSubscriptionUseCase(
+    subscriptionRepo,
+    planRepo,
+    auditLogRepo,
+    remnawaveService,
+    syncSubscriptionExpiryUseCase,
+  );
+  const referralRewardService = new ReferralRewardService(
+    userRepo,
+    subscriptionRepo,
+    planRepo,
+    referralRewardRepo,
+    referralSettingsService,
+    remnawaveService,
+    renewSubscriptionUseCase,
+    notificationService,
+  );
+  const claimPendingReferralRewardsUseCase = new ClaimPendingReferralRewardsUseCase(
+    referralRewardRepo,
+    renewSubscriptionUseCase,
+    referralSettingsService,
+  );
+
+  const registerUserUseCase = new RegisterUserUseCase(userRepo, auditLogRepo, referralSettingsService);
   const activateTrialUseCase = new ActivateTrialUseCase(
     userRepo,
     planRepo,
@@ -148,6 +190,8 @@ export function createContainer(): AppContainer {
     auditLogRepo,
     remnawaveService,
     syncSubscriptionDevicesUseCase,
+    referralRewardService,
+    claimPendingReferralRewardsUseCase,
   );
   const getSubscriptionUseCase = new GetSubscriptionUseCase(
     subscriptionRepo,
@@ -165,13 +209,8 @@ export function createContainer(): AppContainer {
     paymentService,
     qrCodeService,
     syncSubscriptionDevicesUseCase,
-  );
-  const renewSubscriptionUseCase = new RenewSubscriptionUseCase(
-    subscriptionRepo,
-    planRepo,
-    auditLogRepo,
-    remnawaveService,
-    syncSubscriptionExpiryUseCase,
+    referralRewardService,
+    claimPendingReferralRewardsUseCase,
   );
   const getUserDevicesUseCase = new GetUserDevicesUseCase(subscriptionRepo, remnawaveService);
   const deleteUserDeviceUseCase = new DeleteUserDeviceUseCase(
@@ -225,7 +264,13 @@ export function createContainer(): AppContainer {
     databaseHealthService,
   );
   const listUsersUseCase = new ListUsersUseCase(userRepo);
-  const getUserDetailUseCase = new GetUserDetailUseCase(userRepo, subscriptionRepo, paymentRepo, auditLogRepo);
+  const getUserDetailUseCase = new GetUserDetailUseCase(
+    userRepo,
+    subscriptionRepo,
+    paymentRepo,
+    auditLogRepo,
+    referralRewardRepo,
+  );
   const listPaymentsUseCase = new ListPaymentsUseCase(paymentRepo);
   const listNotificationLogsUseCase = new ListNotificationLogsUseCase(notificationLogRepo, userRepo);
   const listAuditLogsUseCase = new ListAuditLogsUseCase(auditLogRepo, userRepo);
@@ -240,6 +285,9 @@ export function createContainer(): AppContainer {
     remnawaveService,
     planRepo,
   );
+  const getReferralOverviewUseCase = new GetReferralOverviewUseCase(referralRewardRepo);
+  const getTopReferrersUseCase = new GetTopReferrersUseCase(referralRewardRepo, userRepo);
+  const listReferralRewardsUseCase = new ListReferralRewardsUseCase(referralRewardRepo, userRepo);
 
   // Handlers
   const handlers = new BotHandlers(
@@ -265,6 +313,8 @@ export function createContainer(): AppContainer {
     deactivateBlockedUserUseCase,
     restoreBlockedUserUseCase,
     getAdminOverviewUseCase,
+    referralRewardRepo,
+    referralSettingsService,
   );
 
   logger.info('Container initialized');
@@ -276,17 +326,22 @@ export function createContainer(): AppContainer {
     paymentRepo,
     auditLogRepo,
     notificationLogRepo,
+    referralRewardRepo,
+    referralSettingsRepo,
     remnawaveService,
     cacheService,
     paymentService,
     qrCodeService,
     notificationService,
     databaseHealthService,
+    referralSettingsService,
+    referralRewardService,
     registerUserUseCase,
     activateTrialUseCase,
     getSubscriptionUseCase,
     purchasePlanUseCase,
     renewSubscriptionUseCase,
+    claimPendingReferralRewardsUseCase,
     sendNoSubscriptionRemindersUseCase,
     sendTrialExpiringRemindersUseCase,
     sendPaidExpiringRemindersUseCase,
@@ -299,6 +354,9 @@ export function createContainer(): AppContainer {
     listNotificationLogsUseCase,
     listAuditLogsUseCase,
     sendCustomNotificationUseCase,
+    getReferralOverviewUseCase,
+    getTopReferrersUseCase,
+    listReferralRewardsUseCase,
     bot,
     handlers,
   };

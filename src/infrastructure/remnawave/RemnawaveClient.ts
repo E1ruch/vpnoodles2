@@ -362,6 +362,20 @@ export class RemnawaveClient implements IRemnawaveService {
     return state?.expireAt ?? null;
   }
 
+  async getUserTrafficLimitBytes(remnawaveUserUuid: string): Promise<number | null> {
+    const logger = getLogger();
+    try {
+      const user = await this.getUser(remnawaveUserUuid);
+      return user.trafficLimitBytes;
+    } catch (error) {
+      if (error instanceof RemnawaveError && error.message.includes('404')) {
+        logger.info({ remnawaveUserUuid }, 'Remnawave user traffic limit: 404 → null');
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async getHwidDeviceTotal(remnawaveUserUuid: string): Promise<number> {
     const { total } = await this.getHwidDevices(remnawaveUserUuid);
     return total;

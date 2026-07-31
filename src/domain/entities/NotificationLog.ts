@@ -12,7 +12,11 @@ export type NotificationType =
   | 'no_subscription_reminder_1h'
   | 'no_subscription_reminder_3d'
   | 'trial_expiring_2d'
-  | 'paid_expiring_2d';
+  | 'paid_expiring_2d'
+  | 'referral_signup_reward'
+  | 'referral_conversion_reward'
+  | 'referral_pending_reward'
+  | 'referral_milestone_reward';
 
 /**
  * Журнал отправленных уведомлений.

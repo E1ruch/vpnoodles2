@@ -3,10 +3,14 @@ import type {
   ISubscriptionRepository,
   IPaymentRepository,
   IAuditLogRepository,
+  IReferralRewardRepository,
 } from '../../domain/interfaces/repositories.js';
+import type { ReferralRewardType, ReferralRewardStatus } from '../../domain/entities/ReferralReward.js';
 import type { SubscriptionStatus, PlanType } from '../../shared/types/index.js';
+import { formatUserLabel } from '../../shared/utils/userLabel.js';
 
 const RECENT_ACTIONS_LIMIT = 20;
+const RECENT_REFERRAL_REWARDS_LIMIT = 20;
 
 export interface UserDetailSubscription {
   id: string;
@@ -39,6 +43,26 @@ export interface UserDetailAction {
   createdAt: Date;
 }
 
+export interface UserDetailReferralReward {
+  id: string;
+  referrerUserId: string;
+  referrerLabel: string;
+  referredUserId: string;
+  referredLabel: string;
+  rewardType: ReferralRewardType;
+  daysGranted: number;
+  trafficGbGranted: number;
+  status: ReferralRewardStatus;
+  createdAt: Date;
+}
+
+export interface UserDetailReferral {
+  referredByUserId: string | null;
+  referredByLabel: string | null;
+  invitedCount: number;
+  rewards: UserDetailReferralReward[];
+}
+
 export interface UserDetail {
   id: string;
   telegramId: number;
@@ -52,6 +76,7 @@ export interface UserDetail {
   subscriptions: UserDetailSubscription[];
   payments: UserDetailPayment[];
   recentActions: UserDetailAction[];
+  referral: UserDetailReferral;
 }
 
 export class GetUserDetailUseCase {
@@ -60,17 +85,27 @@ export class GetUserDetailUseCase {
     private subscriptionRepo: ISubscriptionRepository,
     private paymentRepo: IPaymentRepository,
     private auditLogRepo: IAuditLogRepository,
+    private referralRewardRepo: IReferralRewardRepository,
   ) {}
 
   async execute(userId: string): Promise<UserDetail | null> {
     const user = await this.userRepo.findById(userId);
     if (!user) return null;
 
-    const [subscriptions, payments, recentActions] = await Promise.all([
+    const [subscriptions, payments, recentActions, invitedCount, referredBy, rewardsPage] = await Promise.all([
       this.subscriptionRepo.findByUserId(userId),
       this.paymentRepo.findByUserId(userId),
       this.auditLogRepo.findByUserId(userId, RECENT_ACTIONS_LIMIT),
+      this.userRepo.countReferredBy(userId),
+      user.referredByUserId ? this.userRepo.findById(user.referredByUserId) : Promise.resolve(null),
+      this.referralRewardRepo.findByReferrer(userId, { limit: RECENT_REFERRAL_REWARDS_LIMIT }),
     ]);
+
+    const rewardUserIds = [
+      ...new Set(rewardsPage.items.flatMap((reward) => [reward.referrerUserId, reward.referredUserId])),
+    ];
+    const rewardUsers = await this.userRepo.findByIds(rewardUserIds);
+    const rewardUserById = new Map(rewardUsers.map((u) => [u.id, u]));
 
     return {
       id: user.id,
@@ -82,6 +117,25 @@ export class GetUserDetailUseCase {
       isActive: user.isActive,
       hasUsedTrial: user.hasUsedTrial,
       createdAt: user.createdAt,
+      referral: {
+        referredByUserId: user.referredByUserId,
+        referredByLabel: user.referredByUserId
+          ? formatUserLabel(referredBy, user.referredByUserId)
+          : null,
+        invitedCount,
+        rewards: rewardsPage.items.map((reward) => ({
+          id: reward.id,
+          referrerUserId: reward.referrerUserId,
+          referrerLabel: formatUserLabel(rewardUserById.get(reward.referrerUserId), reward.referrerUserId),
+          referredUserId: reward.referredUserId,
+          referredLabel: formatUserLabel(rewardUserById.get(reward.referredUserId), reward.referredUserId),
+          rewardType: reward.rewardType,
+          daysGranted: reward.daysGranted,
+          trafficGbGranted: reward.trafficGbGranted,
+          status: reward.status,
+          createdAt: reward.createdAt,
+        })),
+      },
       subscriptions: subscriptions.map((subscription) => ({
         id: subscription.id,
         planName: subscription.plan?.name ?? subscription.planId,

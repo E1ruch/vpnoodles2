@@ -4,6 +4,8 @@ import type { Subscription } from '../entities/Subscription.js';
 import type { Payment } from '../entities/Payment.js';
 import type { AuditLog } from '../entities/AuditLog.js';
 import type { NotificationLog } from '../entities/NotificationLog.js';
+import type { ReferralReward, ReferralRewardType } from '../entities/ReferralReward.js';
+import type { ReferralSettings } from '../entities/ReferralSettings.js';
 import type {
   SubscriptionStatus,
   PaymentStatus,
@@ -34,6 +36,12 @@ export interface IUserRepository {
   countCreatedBefore(date: Date): Promise<number>;
   /** Новые регистрации по дням начиная с `since` (включительно), для графика роста. Дни без регистраций не возвращаются. */
   getDailyRegistrations(since: Date): Promise<Array<{ date: string; count: number }>>;
+  /** Реферальная программа: поиск по короткому реферальному коду. */
+  findByReferralCode(code: string): Promise<User | null>;
+  /** Реферальная программа: лениво генерирует код при первом обращении (§5.2 плана), ретраит на коллизию. */
+  getOrCreateReferralCode(userId: string): Promise<string>;
+  /** Реферальная программа: сколько пользователей указали этого пользователя как referredByUserId. */
+  countReferredBy(userId: string): Promise<number>;
 }
 
 export interface IPlanRepository {
@@ -86,6 +94,8 @@ export interface IPaymentRepository {
   create(payment: Partial<Payment>): Promise<Payment>;
   update(id: string, data: Partial<Payment>): Promise<Payment>;
   findCompletedByUserIdAndPlanId(userId: string, planId: string): Promise<Payment | null>;
+  /** Кол-во завершённых платежей пользователя — для проверки «это первая оплата» (реферальная программа, §5.4). */
+  countCompletedByUserId(userId: string): Promise<number>;
   /**
    * Доход по завершённым платежам (status='completed', сгруппировано по
    * provider+currency — валюты не суммируются вместе, т.к. XTR и RUB
@@ -139,4 +149,58 @@ export interface INotificationLogRepository {
     failed: number;
     byType: Array<{ type: NotificationLog['type']; total: number; delivered: number }>;
   }>;
+}
+
+export interface ReferralTopReferrerRow {
+  referrerUserId: string;
+  invitedCount: number;
+  convertedCount: number;
+  totalDaysGranted: number;
+}
+
+export interface ReferralRewardStats {
+  totalReferred: number;
+  totalConverted: number;
+  totalDaysGranted: number;
+  totalPendingDays: number;
+}
+
+export interface IReferralRewardRepository {
+  create(reward: Partial<ReferralReward>): Promise<ReferralReward>;
+  update(id: string, data: Partial<ReferralReward>): Promise<void>;
+  /** Для 30-дневного rolling-кэпа (§2.6) — только успешно начисленные ('granted') конверсионные награды. */
+  countCompletedConversionsSince(referrerUserId: string, since: Date): Promise<number>;
+  /** Для rate-кэпа сигнап-наград (§2.2) — сколько 'referrer_signup' начислений за окно. */
+  countRewardsSince(
+    referrerUserId: string,
+    rewardType: ReferralRewardType,
+    since: Date,
+  ): Promise<number>;
+  /** Сумма daysGranted среди pending_claim-строк этого реферера — для кэпа «банка» (§2.6). */
+  sumPendingDays(referrerUserId: string): Promise<number>;
+  /** То же самое, но по всем пользователям сразу — для KPI «Ожидают получения» в админ-панели (§7.2). */
+  sumPendingDaysTotal(): Promise<number>;
+  /** Сумма trafficGbGranted среди granted-строк заданного типа — для soft-ceiling стэкинга ГБ/день. */
+  sumGrantedTrafficGb(referrerUserId: string, rewardType: ReferralRewardType): Promise<number>;
+  /** Сумма daysGranted среди granted-строк по всем типам — для карточки статистики в разделе "Рефералы". */
+  sumGrantedDaysTotal(referrerUserId: string): Promise<number>;
+  /** Сумма trafficGbGranted среди granted-строк по всем типам — для карточки статистики в разделе "Рефералы". */
+  sumGrantedTrafficGbTotal(referrerUserId: string): Promise<number>;
+  findPendingByReferrer(referrerUserId: string): Promise<ReferralReward[]>;
+  markClaimed(ids: string[], creditedSubscriptionId: string): Promise<void>;
+  /** Уже начисленные (не pending/capped/failed) конверсионные награды referredUserId — для подсчёта convertedCount. */
+  countConvertedReferrals(referrerUserId: string): Promise<number>;
+  findByReferrer(
+    referrerUserId: string,
+    options?: { limit?: number; skip?: number },
+  ): Promise<Paginated<ReferralReward>>;
+  findAll(options?: { limit?: number; skip?: number }): Promise<Paginated<ReferralReward>>;
+  getTopReferrers(limit: number): Promise<ReferralTopReferrerRow[]>;
+  getStats(): Promise<ReferralRewardStats>;
+}
+
+export interface IReferralSettingsRepository {
+  /** Единственная строка настроек; создаётся с дефолтами при первом обращении, если ещё не существует. */
+  get(): Promise<ReferralSettings>;
+  update(data: Partial<ReferralSettings>): Promise<ReferralSettings>;
 }

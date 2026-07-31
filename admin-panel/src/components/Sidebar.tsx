@@ -6,6 +6,7 @@ import {
   IconChevronDown,
   IconCreditCard,
   IconFileText,
+  IconGift,
   IconGrid,
   IconLogOut,
   IconServer,
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavEntry[] = [
   },
   { to: '/logs', label: 'Логи', Icon: IconFileText },
   { to: '/users', label: 'Пользователи', Icon: IconUsers },
+  { to: '/referrals', label: 'Рефералы', Icon: IconGift, badge: 'new' },
 ];
 
 function isChildActive(pathname: string, children: NavLeaf[]): boolean {

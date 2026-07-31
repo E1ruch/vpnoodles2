@@ -13,6 +13,7 @@ import { NotificationConstructorPage } from './pages/NotificationConstructorPage
 import { LogsPage } from './pages/LogsPage';
 import { UsersPage } from './pages/UsersPage';
 import { UserDetailPage } from './pages/UserDetailPage';
+import { ReferralsPage } from './pages/ReferralsPage';
 
 type AuthState = 'checking' | 'authenticated' | 'anonymous';
 
@@ -51,6 +52,7 @@ function App() {
           <Route path="logs" element={<LogsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="users/:id" element={<UserDetailPage />} />
+          <Route path="referrals" element={<ReferralsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

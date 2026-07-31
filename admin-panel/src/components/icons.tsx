@@ -135,6 +135,18 @@ export function IconCheckCircle({ size = 18 }: IconProps) {
   );
 }
 
+export function IconGift({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <rect x="3" y="8" width="18" height="4" rx="1" />
+      <rect x="4.5" y="12" width="15" height="9" rx="1" />
+      <line x1="12" y1="8" x2="12" y2="21" />
+      <path d="M12 8c-1.2-3.5-6.5-3.5-6.5 0.2C5.5 8.7 6 8 12 8Z" />
+      <path d="M12 8c1.2-3.5 6.5-3.5 6.5 0.2 0-0.5-0.5-0.2-6.5-0.2Z" />
+    </svg>
+  );
+}
+
 export function IconXCircle({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

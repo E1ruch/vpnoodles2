@@ -20,6 +20,8 @@ export interface PurchaseResult {
 }
 
 import type { SyncSubscriptionDevicesUseCase } from './SyncSubscriptionDevicesUseCase.js';
+import type { ReferralRewardService } from './referral/ReferralRewardService.js';
+import type { ClaimPendingReferralRewardsUseCase } from './referral/ClaimPendingReferralRewardsUseCase.js';
 
 export class PurchasePlanUseCase {
   constructor(
@@ -32,6 +34,8 @@ export class PurchasePlanUseCase {
     private paymentService: IPaymentService,
     private qrCodeService: IQRCodeService,
     private syncSubscriptionDevices: SyncSubscriptionDevicesUseCase,
+    private referralRewardService: ReferralRewardService,
+    private claimPendingReferralRewards: ClaimPendingReferralRewardsUseCase,
   ) {}
 
   /**
@@ -275,6 +279,25 @@ export class PurchasePlanUseCase {
     }
 
     await this.syncSubscriptionDevices.execute(subscriptionId);
+
+    // Реферальная программа (§5.4), полностью best-effort — сбой здесь не должен уронить
+    // уже успешно проведённую покупку/продление.
+    try {
+      // "Это первая оплата" — дешевле и явнее, чем протаскивать булев флаг через все три
+      // пути фулфилмента (Stars/webhook/polling), см. §5.4.
+      const isFirstPayment = (await this.paymentRepo.countCompletedByUserId(userId)) === 1;
+      if (isFirstPayment && user.referredByUserId) {
+        await this.referralRewardService.processConversionRewards(
+          user,
+          paymentResult.paymentId,
+          plan.durationDays,
+        );
+      }
+      // Сам покупатель мог раньше приглашать других — заберём его собственный банк наград.
+      await this.claimPendingReferralRewards.execute(userId, subscriptionId);
+    } catch (err) {
+      logger.error({ err, userId, subscriptionId }, 'Referral reward processing failed');
+    }
 
     logger.info({ userId, subscriptionId, planId }, 'Plan purchased');
     return { subscriptionId, subscriptionUrl, qrCodeBase64 };

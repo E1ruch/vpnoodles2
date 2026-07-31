@@ -28,6 +28,7 @@ export const ACTION_LABELS: Record<string, string> = {
   user_restored_access: '✅ Восстановил доступ',
   admin_custom_notification_user: '✉️ Уведомление пользователю',
   admin_custom_notification_all: '📢 Рассылка (конструктор)',
+  referral_attributed: '🎁 Атрибуция реферала',
 };
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
@@ -35,6 +36,10 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   no_subscription_reminder_3d: '🔔 Нет подписки (3д)',
   trial_expiring_2d: '⏰ Окончание trial',
   paid_expiring_2d: '⏰ Окончание платной',
+  referral_signup_reward: '🎁 Реферальный бонус (сигнап)',
+  referral_conversion_reward: '🎁 Реферальный бонус (оплата)',
+  referral_pending_reward: '🎁 Реферальный бонус (в ожидании)',
+  referral_milestone_reward: '🏆 Реферальная веха',
 };
 
 export function isAdmin(ctx: Context): boolean {

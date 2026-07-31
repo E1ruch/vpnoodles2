@@ -55,6 +55,26 @@ export interface UserListEntry {
   createdAt: string;
 }
 
+export interface UserDetailReferralReward {
+  id: string;
+  referrerUserId: string;
+  referrerLabel: string;
+  referredUserId: string;
+  referredLabel: string;
+  rewardType: string;
+  daysGranted: number;
+  trafficGbGranted: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface UserDetailReferral {
+  referredByUserId: string | null;
+  referredByLabel: string | null;
+  invitedCount: number;
+  rewards: UserDetailReferralReward[];
+}
+
 export interface UserDetail {
   id: string;
   telegramId: number;
@@ -65,6 +85,7 @@ export interface UserDetail {
   isActive: boolean;
   hasUsedTrial: boolean;
   createdAt: string;
+  referral: UserDetailReferral;
   subscriptions: Array<{
     id: string;
     planName: string;
@@ -298,4 +319,91 @@ export function sendCustomNotification(
 
 export function getAudienceCount(audience: 'all'): Promise<{ count: number }> {
   return apiFetch(`/api/notifications/custom/audience-count?audience=${audience}`);
+}
+
+export interface ReferralStats {
+  totalReferred: number;
+  totalConverted: number;
+  totalDaysGranted: number;
+  totalPendingDays: number;
+}
+
+export interface TopReferrerEntry {
+  referrerUserId: string;
+  userLabel: string;
+  invitedCount: number;
+  convertedCount: number;
+  totalDaysGranted: number;
+}
+
+export interface ReferralRewardEntry {
+  id: string;
+  referrerUserId: string;
+  referrerLabel: string;
+  referredUserId: string;
+  referredLabel: string;
+  rewardType: string;
+  level: number;
+  daysGranted: number;
+  trafficGbGranted: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface ReferralMilestone {
+  convertedCount: number;
+  bonusDays: number;
+}
+
+export interface ReferralSettings {
+  id: string;
+  enabled: boolean;
+  referredSignupBonusType: 'days' | 'traffic_gb';
+  referredSignupBonusDays: number;
+  referredSignupBonusTrafficGb: number;
+  referrerSignupRewardEnabled: boolean;
+  referrerSignupRewardType: 'days' | 'traffic_gb';
+  referrerSignupRewardDays: number;
+  referrerSignupRewardTrafficGb: number;
+  referrerSignupTrafficMaxStackedGb: number;
+  referrerSignupRewardTrafficFallbackDays: number;
+  referrerSignupRewardMaxPer7d: number;
+  conversionRewardMode: 'flat_days' | 'percent_of_purchase';
+  conversionRewardFlatDays: number;
+  conversionRewardPercent: number;
+  conversionTrafficBonusEnabled: boolean;
+  conversionTrafficBonusGb: number;
+  conversionTrafficBonusMaxStackedGb: number;
+  conversionTrafficBonusFallbackDays: number;
+  level2RewardPercent: number;
+  milestones: ReferralMilestone[];
+  maxRewardedConversionsPer30d: number;
+  maxBankedDays: number;
+  updatedAt: string;
+}
+
+export function getReferralStats(): Promise<ReferralStats> {
+  return apiFetch('/api/referrals/stats');
+}
+
+export function getTopReferrers(limit = 10): Promise<TopReferrerEntry[]> {
+  return apiFetch(`/api/referrals/top?limit=${limit}`);
+}
+
+export function getReferralRewards(params: {
+  page: number;
+  pageSize: number;
+}): Promise<Paginated<ReferralRewardEntry>> {
+  const query = new URLSearchParams();
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  return apiFetch(`/api/referrals?${query.toString()}`);
+}
+
+export function getReferralSettings(): Promise<ReferralSettings> {
+  return apiFetch('/api/referrals/settings');
+}
+
+export function updateReferralSettings(payload: Partial<ReferralSettings>): Promise<ReferralSettings> {
+  return apiFetch('/api/referrals/settings', { method: 'PUT', body: JSON.stringify(payload) });
 }

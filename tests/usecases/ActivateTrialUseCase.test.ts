@@ -46,11 +46,22 @@ const mockSyncSubscriptionDevices = {
   execute: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockReferralRewardService = {
+  getReferredSignupPerkAdjustment: jest.fn().mockResolvedValue(null),
+  recordReferredSignupPerk: jest.fn().mockResolvedValue(undefined),
+  grantReferrerSignupReward: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockClaimPendingReferralRewards = {
+  execute: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('ActivateTrialUseCase', () => {
   let useCase: ActivateTrialUseCase;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReferralRewardService.getReferredSignupPerkAdjustment.mockResolvedValue(null);
     useCase = new ActivateTrialUseCase(
       mockUserRepo as never,
       mockPlanRepo as never,
@@ -58,6 +69,8 @@ describe('ActivateTrialUseCase', () => {
       mockAuditLogRepo as never,
       mockRemnawaveService as never,
       mockSyncSubscriptionDevices as never,
+      mockReferralRewardService as never,
+      mockClaimPendingReferralRewards as never,
     );
   });
 
