@@ -139,4 +139,26 @@ export class PaymentRepository implements IPaymentRepository {
     });
     return { items, total };
   }
+
+  async getMonthlyRevenueRub(months: number): Promise<Array<{ month: string; totalRub: number }>> {
+    const repo = await this.getRepo();
+
+    const since = new Date();
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+    since.setMonth(since.getMonth() - (months - 1));
+
+    const rows = await repo
+      .createQueryBuilder('payment')
+      .select("to_char(date_trunc('month', payment.completedAt), 'YYYY-MM')", 'month')
+      .addSelect('SUM(payment.amount)', 'total')
+      .where('payment.status = :status', { status: 'completed' })
+      .andWhere('payment.currency = :currency', { currency: 'RUB' })
+      .andWhere('payment.completedAt >= :since', { since })
+      .groupBy("date_trunc('month', payment.completedAt)")
+      .orderBy("date_trunc('month', payment.completedAt)", 'ASC')
+      .getRawMany<{ month: string; total: string }>();
+
+    return rows.map((row) => ({ month: row.month, totalRub: Number(row.total) }));
+  }
 }

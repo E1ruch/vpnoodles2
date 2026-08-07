@@ -18,6 +18,10 @@ import type { GetReferralOverviewUseCase } from '../../application/usecases/refe
 import type { GetTopReferrersUseCase } from '../../application/usecases/referral/GetTopReferrersUseCase.js';
 import type { ListReferralRewardsUseCase } from '../../application/usecases/referral/ListReferralRewardsUseCase.js';
 import type { ReferralSettingsService } from '../../application/usecases/referral/ReferralSettingsService.js';
+import type { ListServerCostsUseCase } from '../../application/usecases/ListServerCostsUseCase.js';
+import type { UpsertServerCostUseCase } from '../../application/usecases/UpsertServerCostUseCase.js';
+import type { DeleteServerCostUseCase } from '../../application/usecases/DeleteServerCostUseCase.js';
+import type { GetServerCostSummaryUseCase } from '../../application/usecases/GetServerCostSummaryUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createOverviewRouter } from './routes/overview.js';
@@ -28,6 +32,7 @@ import { createLogsRouter } from './routes/logs.js';
 import { createCustomNotificationsRouter } from './routes/customNotifications.js';
 import { createSystemHealthRouter } from './routes/systemHealth.js';
 import { createReferralsRouter } from './routes/referrals.js';
+import { createServersRouter } from './routes/servers.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -47,6 +52,10 @@ export interface AdminHttpServerDeps {
   getTopReferrersUseCase: GetTopReferrersUseCase;
   listReferralRewardsUseCase: ListReferralRewardsUseCase;
   referralSettingsService: ReferralSettingsService;
+  listServerCostsUseCase: ListServerCostsUseCase;
+  upsertServerCostUseCase: UpsertServerCostUseCase;
+  deleteServerCostUseCase: DeleteServerCostUseCase;
+  getServerCostSummaryUseCase: GetServerCostSummaryUseCase;
 }
 
 /** dist/transport/http (компилированный, CommonJS — __dirname доступен нативно) → ../../../admin-panel/dist в корне репо. */
@@ -134,6 +143,16 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
       getTopReferrers: deps.getTopReferrersUseCase,
       listReferralRewards: deps.listReferralRewardsUseCase,
       referralSettings: deps.referralSettingsService,
+    }),
+  );
+  app.use(
+    '/api/servers',
+    requireAdminAuth,
+    createServersRouter({
+      listServerCosts: deps.listServerCostsUseCase,
+      upsertServerCost: deps.upsertServerCostUseCase,
+      deleteServerCost: deps.deleteServerCostUseCase,
+      getServerCostSummary: deps.getServerCostSummaryUseCase,
     }),
   );
 

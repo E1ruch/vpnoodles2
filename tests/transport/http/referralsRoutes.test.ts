@@ -90,6 +90,10 @@ describe('admin referral routes', () => {
     getTopReferrersUseCase: fakeGetTopReferrersUseCase as never,
     listReferralRewardsUseCase: fakeListReferralRewardsUseCase as never,
     referralSettingsService: fakeReferralSettingsService as never,
+    listServerCostsUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    upsertServerCostUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    deleteServerCostUseCase: { execute: jest.fn().mockResolvedValue(undefined) } as never,
+    getServerCostSummaryUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

@@ -11,6 +11,7 @@ import { AuditLogRepository } from '../infrastructure/db/repositories/AuditLogRe
 import { NotificationLogRepository } from '../infrastructure/db/repositories/NotificationLogRepository.js';
 import { ReferralRewardRepository } from '../infrastructure/db/repositories/ReferralRewardRepository.js';
 import { ReferralSettingsRepository } from '../infrastructure/db/repositories/ReferralSettingsRepository.js';
+import { ServerCostRepository } from '../infrastructure/db/repositories/ServerCostRepository.js';
 
 // Services
 import { RemnawaveClient } from '../infrastructure/remnawave/RemnawaveClient.js';
@@ -52,6 +53,10 @@ import { ClaimPendingReferralRewardsUseCase } from '../application/usecases/refe
 import { GetReferralOverviewUseCase } from '../application/usecases/referral/GetReferralOverviewUseCase.js';
 import { GetTopReferrersUseCase } from '../application/usecases/referral/GetTopReferrersUseCase.js';
 import { ListReferralRewardsUseCase } from '../application/usecases/referral/ListReferralRewardsUseCase.js';
+import { ListServerCostsUseCase } from '../application/usecases/ListServerCostsUseCase.js';
+import { UpsertServerCostUseCase } from '../application/usecases/UpsertServerCostUseCase.js';
+import { DeleteServerCostUseCase } from '../application/usecases/DeleteServerCostUseCase.js';
+import { GetServerCostSummaryUseCase } from '../application/usecases/GetServerCostSummaryUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -66,6 +71,7 @@ export interface AppContainer {
   notificationLogRepo: NotificationLogRepository;
   referralRewardRepo: ReferralRewardRepository;
   referralSettingsRepo: ReferralSettingsRepository;
+  serverCostRepo: ServerCostRepository;
 
   // Services
   remnawaveService: RemnawaveClient;
@@ -99,6 +105,10 @@ export interface AppContainer {
   getReferralOverviewUseCase: GetReferralOverviewUseCase;
   getTopReferrersUseCase: GetTopReferrersUseCase;
   listReferralRewardsUseCase: ListReferralRewardsUseCase;
+  listServerCostsUseCase: ListServerCostsUseCase;
+  upsertServerCostUseCase: UpsertServerCostUseCase;
+  deleteServerCostUseCase: DeleteServerCostUseCase;
+  getServerCostSummaryUseCase: GetServerCostSummaryUseCase;
 
   // Bot
   bot: Telegraf;
@@ -121,6 +131,7 @@ export function createContainer(): AppContainer {
   const notificationLogRepo = new NotificationLogRepository();
   const referralRewardRepo = new ReferralRewardRepository();
   const referralSettingsRepo = new ReferralSettingsRepository();
+  const serverCostRepo = new ServerCostRepository();
 
   // Services
   const cacheService = new RedisCacheService();
@@ -288,6 +299,10 @@ export function createContainer(): AppContainer {
   const getReferralOverviewUseCase = new GetReferralOverviewUseCase(referralRewardRepo);
   const getTopReferrersUseCase = new GetTopReferrersUseCase(referralRewardRepo, userRepo);
   const listReferralRewardsUseCase = new ListReferralRewardsUseCase(referralRewardRepo, userRepo);
+  const listServerCostsUseCase = new ListServerCostsUseCase(serverCostRepo);
+  const upsertServerCostUseCase = new UpsertServerCostUseCase(serverCostRepo);
+  const deleteServerCostUseCase = new DeleteServerCostUseCase(serverCostRepo);
+  const getServerCostSummaryUseCase = new GetServerCostSummaryUseCase(serverCostRepo, paymentRepo);
 
   // Handlers
   const handlers = new BotHandlers(
@@ -328,6 +343,7 @@ export function createContainer(): AppContainer {
     notificationLogRepo,
     referralRewardRepo,
     referralSettingsRepo,
+    serverCostRepo,
     remnawaveService,
     cacheService,
     paymentService,
@@ -357,6 +373,10 @@ export function createContainer(): AppContainer {
     getReferralOverviewUseCase,
     getTopReferrersUseCase,
     listReferralRewardsUseCase,
+    listServerCostsUseCase,
+    upsertServerCostUseCase,
+    deleteServerCostUseCase,
+    getServerCostSummaryUseCase,
     bot,
     handlers,
   };

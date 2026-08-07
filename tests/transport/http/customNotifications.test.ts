@@ -61,6 +61,10 @@ describe('customNotifications routes (/api/notifications/custom)', () => {
     getTopReferrersUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
     listReferralRewardsUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     referralSettingsService: { get: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) } as never,
+    listServerCostsUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    upsertServerCostUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    deleteServerCostUseCase: { execute: jest.fn().mockResolvedValue(undefined) } as never,
+    getServerCostSummaryUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
   });
 
   let authCookie: string[];

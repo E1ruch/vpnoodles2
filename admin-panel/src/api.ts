@@ -13,6 +13,7 @@ export interface RevenueSummary {
 }
 
 export interface RemnawaveNodeSummary {
+  uuid: string;
   name: string;
   isConnected: boolean;
   isConnecting: boolean;
@@ -406,4 +407,52 @@ export function getReferralSettings(): Promise<ReferralSettings> {
 
 export function updateReferralSettings(payload: Partial<ReferralSettings>): Promise<ReferralSettings> {
   return apiFetch('/api/referrals/settings', { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export interface ServerCostEntry {
+  id: string;
+  nodeUuid: string;
+  nodeName: string | null;
+  monthlyCostRub: number;
+  nextPaymentDate: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServerCostMonthlyPoint {
+  /** YYYY-MM */
+  month: string;
+  revenueRub: number;
+  costRub: number;
+}
+
+export interface ServerCostSummary {
+  totalMonthlyCostRub: number;
+  currentMonthRevenueRub: number;
+  coveragePercent: number | null;
+  monthlyHistory: ServerCostMonthlyPoint[];
+}
+
+export interface ServerCostUpsertPayload {
+  monthlyCostRub: number;
+  nextPaymentDate: string | null;
+  note: string | null;
+  nodeName: string | null;
+}
+
+export function getServerCosts(): Promise<ServerCostEntry[]> {
+  return apiFetch('/api/servers/costs');
+}
+
+export function upsertServerCost(nodeUuid: string, payload: ServerCostUpsertPayload): Promise<ServerCostEntry> {
+  return apiFetch(`/api/servers/costs/${nodeUuid}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deleteServerCost(nodeUuid: string): Promise<{ ok: true }> {
+  return apiFetch(`/api/servers/costs/${nodeUuid}`, { method: 'DELETE' });
+}
+
+export function getServerCostSummary(months: 6 | 12 = 12): Promise<ServerCostSummary> {
+  return apiFetch(`/api/servers/cost-summary?months=${months}`);
 }

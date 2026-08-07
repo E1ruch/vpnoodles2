@@ -1183,3 +1183,83 @@ button[type='submit']:hover {
 .health-error-message {
   color: var(--text-h);
 }
+
+/* ---------- server costs ---------- */
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-violet);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  align-self: flex-start;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.server-cost-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.server-cost-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.server-cost-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
+}
+.server-cost-form input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+.server-cost-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.server-cost-orphan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.server-cost-orphan-row:last-child {
+  border-bottom: none;
+}
+
+.cost-chart-bar {
+  fill: var(--accent-cyan);
+  opacity: 0.85;
+}
+.cost-chart-bar.hovered {
+  opacity: 1;
+}
+.cost-chart-baseline {
+  stroke: var(--accent-rose);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}

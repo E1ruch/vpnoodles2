@@ -6,6 +6,7 @@ import type { AuditLog } from '../entities/AuditLog.js';
 import type { NotificationLog } from '../entities/NotificationLog.js';
 import type { ReferralReward, ReferralRewardType } from '../entities/ReferralReward.js';
 import type { ReferralSettings } from '../entities/ReferralSettings.js';
+import type { ServerCost } from '../entities/ServerCost.js';
 import type {
   SubscriptionStatus,
   PaymentStatus,
@@ -104,6 +105,23 @@ export interface IPaymentRepository {
   getRevenueSummary(): Promise<RevenueSummary>;
   /** Пагинированный список платежей (с user+plan) для веб-админки, опционально по статусу. */
   findPaginated(params: { skip: number; limit: number; status?: PaymentStatus }): Promise<Paginated<Payment>>;
+  /**
+   * Доход в рублях (status='completed', currency='RUB') по календарным месяцам
+   * за последние `months` месяцев, включая текущий. Для сравнения с расходами
+   * на сервера в веб-админке (§ServerCost) — в отличие от getRevenueSummary()
+   * это фиксированные календарные месяцы, а не скользящие окна.
+   */
+  getMonthlyRevenueRub(months: number): Promise<Array<{ month: string; totalRub: number }>>;
+}
+
+export interface IServerCostRepository {
+  findAll(): Promise<ServerCost[]>;
+  findByNodeUuid(nodeUuid: string): Promise<ServerCost | null>;
+  upsert(
+    nodeUuid: string,
+    data: { monthlyCostRub: number; nextPaymentDate: Date | null; note: string | null; nodeName: string | null },
+  ): Promise<ServerCost>;
+  deleteByNodeUuid(nodeUuid: string): Promise<void>;
 }
 
 export interface IAuditLogRepository {
