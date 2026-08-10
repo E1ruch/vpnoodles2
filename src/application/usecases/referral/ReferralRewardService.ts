@@ -215,11 +215,14 @@ export class ReferralRewardService {
     if (!referrer) return;
 
     if (reward.status === 'pending_claim') {
+      // Раньше здесь всегда стояло жёстко "друг" вместо реального имени — единственное место,
+      // где так было (везде остальными notify* методами имя реально подтягивается).
+      const buyer = await this.userRepo.findById(buyerUserId);
       await this.notificationService.send({
         userId: referrer.id,
         telegramId: referrer.telegramId,
         type: 'referral_pending_reward',
-        text: Texts.REFERRAL_PENDING_REWARD.replace('{firstName}', 'друг').replace(
+        text: Texts.REFERRAL_PENDING_REWARD.replace('{firstName}', buyer?.firstName ?? 'друг').replace(
           '{days}',
           String(reward.daysGranted),
         ),
@@ -381,7 +384,17 @@ export class ReferralRewardService {
     }
 
     const plan = await this.planRepo.findById(activeSub.planId);
-    const isUnlimitedPaidPlan = plan?.type !== 'trial';
+    if (!plan) {
+      // Не нашли план по planId активной подписки — данные разошлись (план удалили и т.п.).
+      // Раньше это молча трактовалось как "платный безлимитный" и уводило бонус в фолбэк-дни;
+      // правильнее считать это неизвестным состоянием и пробовать честно начислить трафик,
+      // а не тихо подменять валюту начисления — но залогировать, это ненормальная ситуация.
+      getLogger().warn(
+        { referrerUserId: target.referrerUserId, subscriptionId: activeSub.id, planId: activeSub.planId },
+        'Referral reward: could not resolve plan for referrer subscription, treating as non-paid (traffic bonus)',
+      );
+    }
+    const isUnlimitedPaidPlan = plan?.type === 'paid';
 
     if (isUnlimitedPaidPlan) {
       // Платный план в этом боте уже безлимитный — прибавка ГБ/день ничего не даст,
@@ -420,7 +433,22 @@ export class ReferralRewardService {
       creditedSubscriptionId: activeSub.id,
       metadata: actualGb < opts.trafficGb ? { stackingCeilingReached: true } : null,
     });
-    if (!row || actualGb <= 0 || !activeSub.remnawaveUserId) return row;
+    if (!row || actualGb <= 0) return row;
+
+    if (!activeSub.remnawaveUserId) {
+      // Подписка есть, но ещё не привязана к Remnawave (см. MigrateUsersToRemnawaveUseCase —
+      // remnawaveUserId у Subscription nullable именно из-за таких случаев). Реально применить
+      // трафик некуда — раньше это тихо считалось "granted", теперь честно failed.
+      getLogger().error(
+        { rewardId: row.id, subscriptionId: activeSub.id },
+        'Referral reward: cannot apply traffic bonus, subscription has no remnawaveUserId',
+      );
+      await this.rewardRepo.update(row.id, {
+        status: 'failed',
+        errorMessage: 'Referrer subscription has no remnawaveUserId',
+      });
+      return { ...row, status: 'failed' };
+    }
 
     try {
       const currentBytes = await this.remnawaveService.getUserTrafficLimitBytes(activeSub.remnawaveUserId);
@@ -522,8 +550,14 @@ export class ReferralRewardService {
     trafficReward: ReferralReward | null,
     triggerFirstName: string,
   ): Promise<void> {
+    // daysReward и trafficReward всегда относятся к одному и тому же рефереру, так что для id
+    // получателя годится любой не-null — только чтобы отправить letter. Раньше решение "отправлять
+    // ли вообще" опиралось на статус ЭТОГО одного объекта (daysReward ?? trafficReward), из-за
+    // чего сбой одного компонента (например, дни не применились из-за ошибки Remnawave) тушил
+    // уведомление целиком, даже если второй компонент (трафик) реально применился. Теперь считаем
+    // granted/banked суммы по каждому компоненту независимо и решаем по ним, а не по "primary".
     const primary = daysReward ?? trafficReward;
-    if (!primary || primary.status === 'failed' || primary.status === 'capped') return;
+    if (!primary) return;
 
     const referrer = await this.userRepo.findById(primary.referrerUserId);
     if (!referrer) return;
@@ -533,6 +567,10 @@ export class ReferralRewardService {
     const bankedDays =
       (daysReward?.status === 'pending_claim' ? daysReward.daysGranted : 0) +
       (trafficReward?.status === 'pending_claim' ? trafficReward.daysGranted : 0);
+
+    // Оба компонента capped/failed/пустые — начислять нечего, молчим (то же поведение, что и
+    // раньше для полностью capped случая — админ видит это в панели, уведомление не нужно).
+    if (grantedDays === 0 && grantedTrafficGb === 0 && bankedDays === 0) return;
 
     if (bankedDays > 0 && grantedDays === 0 && grantedTrafficGb === 0) {
       await this.notificationService.send({

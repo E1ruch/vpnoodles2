@@ -250,6 +250,46 @@ describe('ReferralRewardService', () => {
         expect.objectContaining({ trafficGbGranted: 1, metadata: { stackingCeilingReached: true } }),
       );
     });
+
+    it('marks the reward failed (not granted) when the active subscription has no remnawaveUserId yet', async () => {
+      const referredUser = makeUser({ id: 'friend-1', referredByUserId: 'referrer-1' });
+      mockSettingsService.get.mockResolvedValue(baseSettings({ referrerSignupRewardType: 'traffic_gb' }));
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-referrer',
+        planId: 'plan-trial',
+        remnawaveUserId: null, // ещё не мигрирована/привязана к Remnawave
+      });
+      mockPlanRepo.findById.mockResolvedValue({ id: 'plan-trial', type: 'trial' });
+
+      await service.grantReferrerSignupReward(referredUser);
+
+      expect(mockRemnawaveService.updateTrafficLimit).not.toHaveBeenCalled();
+      expect(mockRewardRepo.update).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'failed' }),
+      );
+      // Не тихий "успех" — уведомление о выдаче не уходит, раз реально ничего не применилось.
+      expect(mockNotificationService.send).not.toHaveBeenCalled();
+    });
+
+    it('treats an unresolvable plan as non-paid and still attempts the traffic grant', async () => {
+      const referredUser = makeUser({ id: 'friend-1', referredByUserId: 'referrer-1' });
+      mockSettingsService.get.mockResolvedValue(baseSettings({ referrerSignupRewardType: 'traffic_gb' }));
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-referrer',
+        planId: 'plan-missing',
+        remnawaveUserId: 'rw-referrer',
+      });
+      mockPlanRepo.findById.mockResolvedValue(null); // план не резолвится
+      mockRemnawaveService.getUserTrafficLimitBytes.mockResolvedValue(0);
+
+      await service.grantReferrerSignupReward(referredUser);
+
+      // Раньше "план не найден" трактовалось как "платный безлимитный" -> фолбэк на дни.
+      // Теперь честно пробуем начислить трафик, как для триала.
+      expect(mockRenewSubscriptionUseCase.execute).not.toHaveBeenCalled();
+      expect(mockRemnawaveService.updateTrafficLimit).toHaveBeenCalledWith('rw-referrer', 2 * 1024 * 1024 * 1024);
+    });
   });
 
   describe('banked-days cap (§2.6)', () => {
@@ -323,6 +363,52 @@ describe('ReferralRewardService', () => {
       );
       expect(mockNotificationService.send).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'referral_milestone_reward' }),
+      );
+    });
+
+    it('still notifies when the days component fails but the traffic component succeeds', async () => {
+      const buyer = makeUser({ id: 'buyer-1', referredByUserId: 'referrer-1' });
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-referrer',
+        planId: 'plan-trial',
+        remnawaveUserId: 'rw-referrer',
+      });
+      mockPlanRepo.findById.mockResolvedValue({ id: 'plan-trial', type: 'trial' });
+      mockRemnawaveService.getUserTrafficLimitBytes.mockResolvedValue(0);
+      mockRenewSubscriptionUseCase.execute.mockRejectedValue(new Error('remnawave hiccup'));
+      mockUserRepo.findById.mockResolvedValue({ id: 'referrer-1', telegramId: 222, referredByUserId: null });
+
+      await service.processConversionRewards(buyer, 'pay-1', 30);
+
+      // Дни не применились (упали) — но трафик применился, и уведомление не должно тушиться
+      // из-за упавшего "primary"-компонента (было именно так до фикса).
+      expect(mockRewardRepo.update).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mockRemnawaveService.updateTrafficLimit).toHaveBeenCalled();
+      expect(mockNotificationService.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'referral_conversion_reward', text: expect.stringContaining('ГБ/день') }),
+      );
+    });
+
+    it("uses the buyer's real name in the pending_claim milestone notification, not a generic fallback", async () => {
+      const buyer = makeUser({ id: 'buyer-1', firstName: 'Petya', referredByUserId: 'referrer-1' });
+      mockSettingsService.get.mockResolvedValue(baseSettings({ conversionTrafficBonusEnabled: false }));
+      // 1-й вызов — для l1_days конверсионной награды (есть подписка, granted);
+      // 2-й вызов — для вехи (подписки нет, banked pending_claim).
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValueOnce({ id: 'sub-referrer' }).mockResolvedValueOnce(null);
+      mockRewardRepo.countConvertedReferrals.mockResolvedValue(5);
+      mockUserRepo.findById.mockImplementation(async (id: string) => {
+        if (id === 'referrer-1') return { id: 'referrer-1', telegramId: 222, referredByUserId: null };
+        if (id === 'buyer-1') return buyer;
+        return null;
+      });
+
+      await service.processConversionRewards(buyer, 'pay-1', 30);
+
+      expect(mockNotificationService.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'referral_pending_reward', text: expect.stringContaining('Petya') }),
       );
     });
 
