@@ -42,6 +42,12 @@ export async function getDataSource(): Promise<DataSource> {
     logging: env.NODE_ENV === 'development',
     migrations: [],
     subscribers: [],
+    // Явный размер пула: этот один процесс обслуживает и Telegram-хендлеры, и
+    // admin-панель, и все scheduled-тики одновременно — дефолт pg (10) делится
+    // между всеми ними. Настраивается через DATABASE_POOL_MAX.
+    extra: {
+      max: env.DATABASE_POOL_MAX,
+    },
   });
 
   await dataSource.initialize();

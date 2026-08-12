@@ -11,8 +11,18 @@ import { PaymentLockedError } from '../shared/errors/index.js';
 import { createAdminHttpApp } from '../transport/http/server.js';
 
 async function bootstrap(): Promise<void> {
-  const logger = getLogger();
-  const env = getEnv();
+  let logger: ReturnType<typeof getLogger>;
+  let env: ReturnType<typeof getEnv>;
+
+  try {
+    logger = getLogger();
+    env = getEnv();
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load configuration:', error);
+    process.exit(1);
+    return;
+  }
 
   try {
     logger.info('Starting VPNoodles bot...');
@@ -160,6 +170,7 @@ async function bootstrap(): Promise<void> {
       logger.info({ port: env.ADMIN_PORT }, 'Admin HTTP server started');
     });
 
+    let pollTickInterval: NodeJS.Timeout | undefined;
     const pollMs = env.YOOKASSA_POLL_INTERVAL_MS;
     if (pollMs > 0 && yooKassaService.isConfigured()) {
       const tick = () => {
@@ -173,7 +184,7 @@ async function bootstrap(): Promise<void> {
           yooKassaService,
         ).catch((err) => logger.warn({ err }, 'YooKassa poll run failed'));
       };
-      setInterval(tick, pollMs);
+      pollTickInterval = setInterval(tick, pollMs);
       setTimeout(tick, 8000);
       logger.info({ pollMs }, 'YooKassa pending payments polling enabled');
     } else if (!yooKassaService.isConfigured()) {
@@ -183,6 +194,7 @@ async function bootstrap(): Promise<void> {
     }
 
     // Уведомления: напоминания «нет подписки» и «окончание trial».
+    let notifTickInterval: NodeJS.Timeout | undefined;
     if (env.NOTIFICATIONS_ENABLED) {
       const notifTickMs = env.NOTIFICATIONS_TICK_INTERVAL_MS;
       const runNotificationsTick = () => {
@@ -198,7 +210,7 @@ async function bootstrap(): Promise<void> {
             .catch((err) => logger.warn({ err }, 'Paid expiring reminders tick failed')),
         ]).catch(() => undefined);
       };
-      setInterval(runNotificationsTick, notifTickMs);
+      notifTickInterval = setInterval(runNotificationsTick, notifTickMs);
       // Первый прогон — через 15 секунд после старта.
       setTimeout(runNotificationsTick, 15000);
       logger.info({ tickMs: notifTickMs }, 'Proactive notifications scheduler enabled');
@@ -206,25 +218,79 @@ async function bootstrap(): Promise<void> {
       logger.info('Proactive notifications scheduler disabled (NOTIFICATIONS_ENABLED=false)');
     }
 
+    const isWebhookMode = Boolean(env.TELEGRAM_WEBHOOK_URL);
+
+    const closeHttpServer = (srv: http.Server, name: string): Promise<void> =>
+      new Promise((resolve) => {
+        srv.close((err) => {
+          if (err) logger.warn({ err, server: name }, 'Error closing HTTP server');
+          resolve();
+        });
+      });
+
+    let shuttingDown = false;
     const shutdown = async (signal: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       logger.info({ signal }, 'Shutting down...');
-      container.bot.stop(signal);
-      server.close();
-      adminServer.close();
-      await closeDataSource();
-      await container.cacheService.disconnect();
+
+      // Force-exit fallback in case something hangs (e.g. a stuck in-flight request).
+      const forceExitTimer = setTimeout(() => {
+        logger.error('Graceful shutdown timed out, forcing exit');
+        process.exit(1);
+      }, 10000);
+      forceExitTimer.unref();
+
+      if (pollTickInterval) clearInterval(pollTickInterval);
+      if (notifTickInterval) clearInterval(notifTickInterval);
+
+      try {
+        // Telegraf's stop() only makes sense for launch()-based transports (long polling);
+        // in webhook mode the bot was never launch()'d and stop() throws "Bot is not running!".
+        if (!isWebhookMode) {
+          container.bot.stop(signal);
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Error stopping Telegraf bot');
+      }
+
+      await Promise.all([closeHttpServer(server, 'main'), closeHttpServer(adminServer, 'admin')]);
+
+      try {
+        await closeDataSource();
+      } catch (err) {
+        logger.warn({ err }, 'Error closing database connection');
+      }
+
+      try {
+        await container.cacheService.disconnect();
+      } catch (err) {
+        logger.warn({ err }, 'Error disconnecting cache service');
+      }
+
+      clearTimeout(forceExitTimer);
       process.exit(0);
     };
 
-    process.once('SIGINT', () => shutdown('SIGINT'));
-    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    process.once('SIGINT', () => {
+      shutdown('SIGINT').catch((err) => {
+        logger.error({ err }, 'Error during shutdown');
+        process.exit(1);
+      });
+    });
+    process.once('SIGTERM', () => {
+      shutdown('SIGTERM').catch((err) => {
+        logger.error({ err }, 'Error during shutdown');
+        process.exit(1);
+      });
+    });
 
     server.listen(port, () => {
       logger.info({ port }, 'HTTP server started');
       logger.info(`YooKassa webhook URL: http://your-domain.com/webhook/yookassa`);
     });
 
-    if (env.TELEGRAM_WEBHOOK_URL) {
+    if (isWebhookMode) {
       await container.bot.telegram.setWebhook(env.TELEGRAM_WEBHOOK_URL + telegramWebhookPath);
       const webhookInfo = await container.bot.telegram.getWebhookInfo();
       logger.info({ webhookInfo }, 'Bot started with webhook');
@@ -244,4 +310,8 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error('Unhandled error during bootstrap:', error);
+  process.exit(1);
+});

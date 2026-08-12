@@ -27,6 +27,7 @@ const envSchema = z.object({
   DATABASE_NAME: z.string().default('vpnoodles'),
   DATABASE_USER: z.string().default('postgres'),
   DATABASE_PASSWORD: z.string().default('postgres'),
+  DATABASE_POOL_MAX: z.coerce.number().default(20),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),

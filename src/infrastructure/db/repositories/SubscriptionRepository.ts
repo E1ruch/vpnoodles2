@@ -55,16 +55,6 @@ export class SubscriptionRepository implements ISubscriptionRepository {
     return sub;
   }
 
-  async findExpiringSoon(hours: number): Promise<Subscription[]> {
-    const repo = await this.getRepo();
-    const threshold = new Date();
-    threshold.setHours(threshold.getHours() + hours);
-    return repo.find({
-      where: { status: 'active', endDate: threshold as unknown as Date },
-      relations: ['user'],
-    });
-  }
-
   async findActiveExpiringWithinDays(days: number): Promise<Subscription[]> {
     const repo = await this.getRepo();
     const now = new Date();

@@ -3,7 +3,7 @@ import type { PurchasePlanUseCase } from '../../application/usecases/PurchasePla
 import type { IPaymentRepository } from '../../domain/interfaces/repositories.js';
 import type { IUserRepository } from '../../domain/interfaces/repositories.js';
 import { getLogger } from '../../shared/logger/index.js';
-import { SubscriptionError, PaymentLockedError } from '../../shared/errors/index.js';
+import { PaymentLockedError } from '../../shared/errors/index.js';
 import { YooKassaService } from './YooKassaService.js';
 import { sendSubscriptionDelivered } from '../../transport/telegram/user/subscriptionDelivery.js';
 
@@ -93,20 +93,6 @@ export async function runYooKassaFulfillmentTick(
         // соседний polling-тик) — это не ошибка, а сработавшая защита от гонки.
         // Просто пропускаем, следующий тик увидит уже завершённый платёж.
         logger.debug({ paymentId: p.id }, 'YooKassa: payment fulfillment locked elsewhere, skip');
-        continue;
-      }
-      if (
-        err instanceof SubscriptionError &&
-        err.message === 'User already has active paid subscription'
-      ) {
-        await deps.paymentRepo.update(p.id, {
-          status: 'completed',
-          completedAt: new Date(),
-        });
-        logger.info(
-          { paymentId: p.id, userId: p.userId },
-          'YooKassa payment already covered by active paid subscription, marked as completed',
-        );
         continue;
       }
       logger.warn({ err, paymentId: p.id }, 'YooKassa fulfillment row failed');

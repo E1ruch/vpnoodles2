@@ -20,7 +20,10 @@ export class NotificationLogRepository implements INotificationLogRepository {
     options?: { entityId?: string | null; cycleKey?: string | null },
   ): Promise<boolean> {
     const repo = await this.getRepo();
-    const where: Record<string, unknown> = { userId, type };
+    // Только успешно доставленные считаются «уже отправлено» — иначе транзиентный сбой
+    // (таймаут, сетевой сбой, 429 от Telegram) навсегда блокирует повторную попытку
+    // для этого пользователя/типа/цикла.
+    const where: Record<string, unknown> = { userId, type, delivered: true };
     if (options?.entityId !== undefined) {
       where['entityId'] = options.entityId ?? null;
     }

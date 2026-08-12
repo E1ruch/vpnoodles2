@@ -6,6 +6,10 @@ import { getLogger } from '../../shared/logger/index.js';
 import { getEnv } from '../../shared/config/env.js';
 import { Texts } from '../../transport/telegram/texts.js';
 import { noSubscriptionReminderKeyboard } from '../../transport/telegram/keyboards.js';
+import { sleep } from '../../shared/utils/index.js';
+
+/** Задержка между отправками, чтобы не упереться в rate limit Telegram (~30 msg/sec). */
+const SEND_THROTTLE_MS = 50;
 
 export interface ReminderTickResult {
   checked: number;
@@ -84,6 +88,8 @@ export class SendNoSubscriptionRemindersUseCase {
         });
         if (delivered) result.sentWave1 += 1;
         else result.failed += 1;
+
+        await sleep(SEND_THROTTLE_MS);
       }
 
       // Волна 2 — через 3 дня.
@@ -105,6 +111,8 @@ export class SendNoSubscriptionRemindersUseCase {
           });
           if (delivered) result.sentWave2 += 1;
           else result.failed += 1;
+
+          await sleep(SEND_THROTTLE_MS);
         }
       }
     }

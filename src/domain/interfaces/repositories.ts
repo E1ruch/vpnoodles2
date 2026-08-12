@@ -60,7 +60,6 @@ export interface ISubscriptionRepository {
   count(): Promise<number>;
   create(subscription: Partial<Subscription>): Promise<Subscription>;
   update(id: string, data: Partial<Subscription>): Promise<Subscription>;
-  findExpiringSoon(hours: number): Promise<Subscription[]>;
   /** Активные подписки, заканчивающиеся в ближайшие `days` дней (включительно). */
   findActiveExpiringWithinDays(days: number): Promise<Subscription[]>;
   /**

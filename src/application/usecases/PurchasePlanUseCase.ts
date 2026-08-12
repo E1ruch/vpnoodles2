@@ -199,26 +199,43 @@ export class PurchasePlanUseCase {
 
     let remnawaveUserId: string;
 
-    if (existingRemnawaveUserId) {
-      if (renewalSubscriptionId) {
-        // Продление платной подписки: extendUser переносит оставшиеся дни
-        await this.remnawaveService.extendUser(existingRemnawaveUserId, plan.durationDays);
-        await this.remnawaveService.updateUserTag(existingRemnawaveUserId, tag);
-        await this.remnawaveService.updateDeviceLimit(existingRemnawaveUserId, plan.deviceLimit);
-      } else {
-        await this.remnawaveService.upgradeUser(existingRemnawaveUserId, paidRemnawaveOptions);
-      }
-      remnawaveUserId = existingRemnawaveUserId;
-    } else {
-      remnawaveUserId = await this.remnawaveService.createUser(
-        user.telegramId,
-        user.username ?? `user_${user.telegramId}`,
-        tag,
-        activeInternalSquads,
-        paidRemnawaveOptions,
+    if (existingPaymentRecord?.remnawaveUserId) {
+      // Retry уже упавшей на более позднем шаге попытки: мутация Remnawave для
+      // этого платежа уже применена (см. комментарий на Payment.remnawaveUserId) —
+      // extendUser не идемпотентен и задвоил бы дни подписки, если вызвать снова.
+      remnawaveUserId = existingPaymentRecord.remnawaveUserId;
+      logger.info(
+        { fulfillmentPaymentId, remnawaveUserId },
+        'Remnawave mutation already applied for this payment, skipping re-fulfillment',
       );
-      // createUser может вернуть уже существующего пользователя в Remnawave без обновления срока
-      await this.remnawaveService.upgradeUser(remnawaveUserId, paidRemnawaveOptions);
+    } else {
+      if (existingRemnawaveUserId) {
+        if (renewalSubscriptionId) {
+          // Продление платной подписки: extendUser переносит оставшиеся дни
+          await this.remnawaveService.extendUser(existingRemnawaveUserId, plan.durationDays);
+          await this.remnawaveService.updateUserTag(existingRemnawaveUserId, tag);
+          await this.remnawaveService.updateDeviceLimit(existingRemnawaveUserId, plan.deviceLimit);
+        } else {
+          await this.remnawaveService.upgradeUser(existingRemnawaveUserId, paidRemnawaveOptions);
+        }
+        remnawaveUserId = existingRemnawaveUserId;
+      } else {
+        remnawaveUserId = await this.remnawaveService.createUser(
+          user.telegramId,
+          user.username ?? `user_${user.telegramId}`,
+          tag,
+          activeInternalSquads,
+          paidRemnawaveOptions,
+        );
+        // createUser может вернуть уже существующего пользователя в Remnawave без обновления срока
+        await this.remnawaveService.upgradeUser(remnawaveUserId, paidRemnawaveOptions);
+      }
+
+      if (fulfillmentPaymentId) {
+        // Фиксируем результат мутации сразу, до подписки/QR/audit log/markAsCompleted —
+        // именно эта запись защищает от повторного extendUser при retry.
+        await this.paymentRepo.update(fulfillmentPaymentId, { remnawaveUserId });
+      }
     }
 
     let subscriptionId: string;

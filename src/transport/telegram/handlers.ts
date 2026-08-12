@@ -139,6 +139,8 @@ export class BotHandlers {
   }
 
   register(): void {
+    this.registerCallbackQueryAutoAnswer();
+
     this.bot.start(this.handleStart);
     this.bot.action('back_main', this.handleBackMain);
     this.bot.action('profile', this.handleProfile);
@@ -155,6 +157,38 @@ export class BotHandlers {
     this.bot.catch((err) => {
       const logger = getLogger();
       logger.error({ err }, 'Bot error');
+    });
+  }
+
+  /**
+   * Большинство inline-хендлеров (bot.action) по всему боту не вызывают
+   * ctx.answerCbQuery() — из-за этого кнопка в клиенте Telegram остаётся с
+   * крутящимся спиннером до таймаута. Вместо правки ~40 отдельных хендлеров
+   * across файлов, оборачиваем весь апдейт-конвейер: если за время обработки
+   * callback_query ни один хендлер не ответил сам явным текстом/alert'ом,
+   * отвечаем пустым ответом после. Должно быть зарегистрировано раньше
+   * остальных bot.action()/handlers.register(), чтобы обернуть их все.
+   */
+  private registerCallbackQueryAutoAnswer(): void {
+    this.bot.use(async (ctx, next) => {
+      if (!ctx.callbackQuery) {
+        await next();
+        return;
+      }
+      let answered = false;
+      const originalAnswer = ctx.answerCbQuery.bind(ctx);
+      ctx.answerCbQuery = (async (...args: Parameters<typeof originalAnswer>) => {
+        answered = true;
+        return originalAnswer(...args);
+      }) as typeof ctx.answerCbQuery;
+
+      try {
+        await next();
+      } finally {
+        if (!answered) {
+          await originalAnswer().catch(() => undefined);
+        }
+      }
     });
   }
 

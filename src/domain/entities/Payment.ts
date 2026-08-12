@@ -44,6 +44,16 @@ export class Payment {
   @Column({ type: 'timestamp', nullable: true })
   completedAt: Date | null = null;
 
+  /**
+   * Заполняется сразу после успешной мутации в Remnawave (extendUser/upgradeUser/
+   * createUser), до всех последующих шагов фулфилмента. Если это поле уже
+   * заполнено при повторном вызове execute() для того же платежа (retry после
+   * падения на более позднем шаге) — мутацию в Remnawave не повторяем, т.к.
+   * extendUser не идемпотентен и задвоил бы дни подписки. См. PurchasePlanUseCase.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  remnawaveUserId: string | null = null;
+
   @Column({ type: 'boolean', default: false })
   isIdempotent: boolean = false;
 

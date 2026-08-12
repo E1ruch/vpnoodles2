@@ -24,6 +24,7 @@ const mockSubscriptionRepo = {
 
 const mockPaymentRepo = {
   findById: jest.fn(),
+  update: jest.fn().mockResolvedValue({}),
   countCompletedByUserId: jest.fn().mockResolvedValue(0),
 };
 
@@ -70,6 +71,7 @@ describe('PurchasePlanUseCase — fulfillment lock', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPaymentRepo.countCompletedByUserId.mockResolvedValue(0);
+    mockPaymentRepo.update.mockResolvedValue({});
     useCase = new PurchasePlanUseCase(
       mockUserRepo as never,
       mockPlanRepo as never,
@@ -154,5 +156,85 @@ describe('PurchasePlanUseCase — fulfillment lock', () => {
     ).rejects.toThrow('Plan not found');
 
     expect(mockPaymentService.releaseFulfillmentLock).toHaveBeenCalledWith('pay-1');
+  });
+
+  // Регрессионные тесты на фикс задвоения дней подписки: если фулфилмент падает
+  // ПОСЛЕ успешной мутации в Remnawave, но ДО markAsCompleted (например, на записи
+  // подписки/QR/audit log), retry не должен повторно вызывать extendUser/upgradeUser/
+  // createUser — иначе дни подписки задваиваются (extendUser не идемпотентен).
+  describe('idempotency of the Remnawave mutation across retries', () => {
+    beforeEach(() => {
+      mockPaymentService.acquireFulfillmentLock.mockResolvedValue(true);
+      mockUserRepo.findById.mockResolvedValue({ id: 'user-1', telegramId: 123, username: 'u' });
+      mockPlanRepo.findById.mockResolvedValue({
+        id: 'plan-1',
+        type: 'paid',
+        durationDays: 30,
+        deviceLimit: 3,
+        priceRub: 199,
+        priceStars: 0,
+      });
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue(null);
+      mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
+      mockRemnawaveService.createUser.mockResolvedValue('rw-1');
+      mockRemnawaveService.upgradeUser.mockResolvedValue(undefined);
+      mockRemnawaveService.getSubscriptionUrl.mockResolvedValue('https://sub.example.com/x');
+      mockSubscriptionRepo.create.mockResolvedValue({ id: 'sub-1' });
+      mockSubscriptionRepo.update.mockResolvedValue({});
+      mockPaymentService.markAsCompleted.mockResolvedValue({});
+    });
+
+    it('persists remnawaveUserId on the payment right after the Remnawave mutation succeeds', async () => {
+      mockPaymentRepo.findById.mockResolvedValue({
+        id: 'pay-1',
+        userId: 'user-1',
+        planId: 'plan-1',
+        provider: 'yookassa',
+        status: 'pending',
+        externalPaymentId: null,
+        remnawaveUserId: null,
+      });
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', {
+        existingPaymentId: 'pay-1',
+        externalChargeId: 'yk-charge-1',
+      });
+
+      expect(mockRemnawaveService.createUser).toHaveBeenCalledTimes(1);
+      expect(mockPaymentRepo.update).toHaveBeenCalledWith('pay-1', { remnawaveUserId: 'rw-1' });
+
+      // Записываем результат мутации до того, как продолжаем фулфилмент дальше.
+      const updateOrder = mockPaymentRepo.update.mock.invocationCallOrder[0] as number;
+      const markCompletedOrder = mockPaymentService.markAsCompleted.mock
+        .invocationCallOrder[0] as number;
+      expect(updateOrder).toBeLessThan(markCompletedOrder);
+    });
+
+    it('skips the Remnawave mutation entirely on retry when remnawaveUserId is already set', async () => {
+      mockPaymentRepo.findById.mockResolvedValue({
+        id: 'pay-1',
+        userId: 'user-1',
+        planId: 'plan-1',
+        provider: 'yookassa',
+        status: 'pending', // предыдущая попытка упала до markAsCompleted
+        externalPaymentId: null,
+        remnawaveUserId: 'rw-1', // но мутация в Remnawave уже была применена
+      });
+
+      const result = await useCase.execute('user-1', 'plan-1', 'yookassa', {
+        existingPaymentId: 'pay-1',
+        externalChargeId: 'yk-charge-1',
+      });
+
+      expect(mockRemnawaveService.createUser).not.toHaveBeenCalled();
+      expect(mockRemnawaveService.upgradeUser).not.toHaveBeenCalled();
+      expect(mockRemnawaveService.extendUser).not.toHaveBeenCalled();
+      // Мутация уже применена — незачем перезаписывать то же самое значение снова.
+      expect(mockPaymentRepo.update).not.toHaveBeenCalled();
+
+      // Остальной (идемпотентный) хвост фулфилмента всё равно должен отработать.
+      expect(result.subscriptionId).toBe('sub-1');
+      expect(mockPaymentService.markAsCompleted).toHaveBeenCalledWith('pay-1', 'yk-charge-1');
+    });
   });
 });

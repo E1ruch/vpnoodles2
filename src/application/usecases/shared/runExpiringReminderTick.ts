@@ -6,6 +6,10 @@ import type { SyncSubscriptionExpiryUseCase } from '../SyncSubscriptionExpiryUse
 import type { Subscription } from '../../../domain/entities/Subscription.js';
 import type { NotificationType } from '../../../domain/entities/NotificationLog.js';
 import { getLogger } from '../../../shared/logger/index.js';
+import { sleep } from '../../../shared/utils/index.js';
+
+/** Задержка между отправками, чтобы не упереться в rate limit Telegram (~30 msg/sec). */
+const SEND_THROTTLE_MS = 50;
 
 export interface ExpiringReminderTickResult {
   checked: number;
@@ -107,6 +111,8 @@ export async function runExpiringReminderTick(
 
     if (delivered) result.sent += 1;
     else result.failed += 1;
+
+    await sleep(SEND_THROTTLE_MS);
   }
 
   logger.info(
