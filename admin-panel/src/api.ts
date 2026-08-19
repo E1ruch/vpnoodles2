@@ -456,3 +456,55 @@ export function deleteServerCost(nodeUuid: string): Promise<{ ok: true }> {
 export function getServerCostSummary(months: 6 | 12 = 12): Promise<ServerCostSummary> {
   return apiFetch(`/api/servers/cost-summary?months=${months}`);
 }
+
+export type PlanType = 'trial' | 'paid';
+
+export interface Plan {
+  id: string;
+  name: string;
+  type: PlanType;
+  durationDays: number;
+  deviceLimit: number;
+  priceStars: number;
+  priceRub: number;
+  isActive: boolean;
+  sortOrder: number;
+  remnawaveTag: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Plan + агрегированная статистика — только GET /api/plans её считает; create/update её не пересчитывают. */
+export interface PlanEntry extends Plan {
+  activeSubscriptionsCount: number;
+}
+
+export interface PlanInput {
+  name: string;
+  type: PlanType;
+  durationDays: number;
+  deviceLimit: number;
+  priceStars: number;
+  priceRub: number;
+  isActive: boolean;
+  sortOrder: number;
+  remnawaveTag: string | null;
+  description: string | null;
+}
+
+export function getPlans(): Promise<PlanEntry[]> {
+  return apiFetch('/api/plans');
+}
+
+export function createPlan(payload: PlanInput): Promise<Plan> {
+  return apiFetch('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updatePlan(id: string, payload: Partial<PlanInput>): Promise<Plan> {
+  return apiFetch(`/api/plans/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deletePlan(id: string): Promise<{ ok: true }> {
+  return apiFetch(`/api/plans/${id}`, { method: 'DELETE' });
+}

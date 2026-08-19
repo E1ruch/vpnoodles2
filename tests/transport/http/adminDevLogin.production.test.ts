@@ -53,6 +53,10 @@ describe('admin dev-login (production: credentials set but NODE_ENV=production)'
     upsertServerCostUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
     deleteServerCostUseCase: { execute: jest.fn().mockResolvedValue(undefined) } as never,
     getServerCostSummaryUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    listPlansUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    createPlanUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    updatePlanUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    deletePlanUseCase: { execute: jest.fn().mockResolvedValue(undefined) } as never,
   });
 
   it('/api/auth/config reports devLoginEnabled: false regardless of configured credentials', async () => {

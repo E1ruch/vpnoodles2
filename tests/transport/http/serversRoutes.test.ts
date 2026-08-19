@@ -84,6 +84,10 @@ describe('admin server-cost routes', () => {
     upsertServerCostUseCase: fakeUpsertServerCostUseCase as never,
     deleteServerCostUseCase: fakeDeleteServerCostUseCase as never,
     getServerCostSummaryUseCase: fakeGetServerCostSummaryUseCase as never,
+    listPlansUseCase: { execute: jest.fn().mockResolvedValue([]) } as never,
+    createPlanUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    updatePlanUseCase: { execute: jest.fn().mockResolvedValue({}) } as never,
+    deletePlanUseCase: { execute: jest.fn().mockResolvedValue(undefined) } as never,
   });
 
   let authCookie: string[];

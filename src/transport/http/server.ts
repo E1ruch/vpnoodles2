@@ -22,6 +22,10 @@ import type { ListServerCostsUseCase } from '../../application/usecases/ListServ
 import type { UpsertServerCostUseCase } from '../../application/usecases/UpsertServerCostUseCase.js';
 import type { DeleteServerCostUseCase } from '../../application/usecases/DeleteServerCostUseCase.js';
 import type { GetServerCostSummaryUseCase } from '../../application/usecases/GetServerCostSummaryUseCase.js';
+import type { ListPlansUseCase } from '../../application/usecases/ListPlansUseCase.js';
+import type { CreatePlanUseCase } from '../../application/usecases/CreatePlanUseCase.js';
+import type { UpdatePlanUseCase } from '../../application/usecases/UpdatePlanUseCase.js';
+import type { DeletePlanUseCase } from '../../application/usecases/DeletePlanUseCase.js';
 import { getLogger } from '../../shared/logger/index.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createOverviewRouter } from './routes/overview.js';
@@ -33,6 +37,7 @@ import { createCustomNotificationsRouter } from './routes/customNotifications.js
 import { createSystemHealthRouter } from './routes/systemHealth.js';
 import { createReferralsRouter } from './routes/referrals.js';
 import { createServersRouter } from './routes/servers.js';
+import { createPlansRouter } from './routes/plans.js';
 import { createRequireAdminAuth } from './middleware/adminAuth.js';
 
 export interface AdminHttpServerDeps {
@@ -56,6 +61,10 @@ export interface AdminHttpServerDeps {
   upsertServerCostUseCase: UpsertServerCostUseCase;
   deleteServerCostUseCase: DeleteServerCostUseCase;
   getServerCostSummaryUseCase: GetServerCostSummaryUseCase;
+  listPlansUseCase: ListPlansUseCase;
+  createPlanUseCase: CreatePlanUseCase;
+  updatePlanUseCase: UpdatePlanUseCase;
+  deletePlanUseCase: DeletePlanUseCase;
 }
 
 /** dist/transport/http (компилированный, CommonJS — __dirname доступен нативно) → ../../../admin-panel/dist в корне репо. */
@@ -153,6 +162,16 @@ export function createAdminHttpApp(deps: AdminHttpServerDeps): Express {
       upsertServerCost: deps.upsertServerCostUseCase,
       deleteServerCost: deps.deleteServerCostUseCase,
       getServerCostSummary: deps.getServerCostSummaryUseCase,
+    }),
+  );
+  app.use(
+    '/api/plans',
+    requireAdminAuth,
+    createPlansRouter({
+      listPlans: deps.listPlansUseCase,
+      createPlan: deps.createPlanUseCase,
+      updatePlan: deps.updatePlanUseCase,
+      deletePlan: deps.deletePlanUseCase,
     }),
   );
 

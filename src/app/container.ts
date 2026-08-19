@@ -57,6 +57,10 @@ import { ListServerCostsUseCase } from '../application/usecases/ListServerCostsU
 import { UpsertServerCostUseCase } from '../application/usecases/UpsertServerCostUseCase.js';
 import { DeleteServerCostUseCase } from '../application/usecases/DeleteServerCostUseCase.js';
 import { GetServerCostSummaryUseCase } from '../application/usecases/GetServerCostSummaryUseCase.js';
+import { ListPlansUseCase } from '../application/usecases/ListPlansUseCase.js';
+import { CreatePlanUseCase } from '../application/usecases/CreatePlanUseCase.js';
+import { UpdatePlanUseCase } from '../application/usecases/UpdatePlanUseCase.js';
+import { DeletePlanUseCase } from '../application/usecases/DeletePlanUseCase.js';
 
 // Handlers
 import { BotHandlers } from '../transport/telegram/handlers.js';
@@ -109,6 +113,10 @@ export interface AppContainer {
   upsertServerCostUseCase: UpsertServerCostUseCase;
   deleteServerCostUseCase: DeleteServerCostUseCase;
   getServerCostSummaryUseCase: GetServerCostSummaryUseCase;
+  listPlansUseCase: ListPlansUseCase;
+  createPlanUseCase: CreatePlanUseCase;
+  updatePlanUseCase: UpdatePlanUseCase;
+  deletePlanUseCase: DeletePlanUseCase;
 
   // Bot
   bot: Telegraf;
@@ -303,6 +311,10 @@ export function createContainer(): AppContainer {
   const upsertServerCostUseCase = new UpsertServerCostUseCase(serverCostRepo);
   const deleteServerCostUseCase = new DeleteServerCostUseCase(serverCostRepo);
   const getServerCostSummaryUseCase = new GetServerCostSummaryUseCase(serverCostRepo, paymentRepo);
+  const listPlansUseCase = new ListPlansUseCase(planRepo, subscriptionRepo);
+  const createPlanUseCase = new CreatePlanUseCase(planRepo);
+  const updatePlanUseCase = new UpdatePlanUseCase(planRepo);
+  const deletePlanUseCase = new DeletePlanUseCase(planRepo);
 
   // Handlers
   const handlers = new BotHandlers(
@@ -377,6 +389,10 @@ export function createContainer(): AppContainer {
     upsertServerCostUseCase,
     deleteServerCostUseCase,
     getServerCostSummaryUseCase,
+    listPlansUseCase,
+    createPlanUseCase,
+    updatePlanUseCase,
+    deletePlanUseCase,
     bot,
     handlers,
   };

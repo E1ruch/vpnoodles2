@@ -8,6 +8,7 @@ import {
   IconFileText,
   IconGift,
   IconGrid,
+  IconLayers,
   IconLogOut,
   IconServer,
   IconTrendingUp,
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavEntry[] = [
   { to: '/revenue', label: 'Доход', Icon: IconTrendingUp },
   { to: '/payments', label: 'Платежи', Icon: IconCreditCard },
   { to: '/servers', label: 'Серверы', Icon: IconServer },
+  { to: '/plans', label: 'Тарифы', Icon: IconLayers },
   { to: '/monitoring', label: 'Мониторинг', Icon: IconActivity, badge: 'new' },
   {
     label: 'Уведомления',

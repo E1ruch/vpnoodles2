@@ -165,6 +165,10 @@ async function bootstrap(): Promise<void> {
       upsertServerCostUseCase: container.upsertServerCostUseCase,
       deleteServerCostUseCase: container.deleteServerCostUseCase,
       getServerCostSummaryUseCase: container.getServerCostSummaryUseCase,
+      listPlansUseCase: container.listPlansUseCase,
+      createPlanUseCase: container.createPlanUseCase,
+      updatePlanUseCase: container.updatePlanUseCase,
+      deletePlanUseCase: container.deletePlanUseCase,
     });
     const adminServer = adminApp.listen(env.ADMIN_PORT, () => {
       logger.info({ port: env.ADMIN_PORT }, 'Admin HTTP server started');

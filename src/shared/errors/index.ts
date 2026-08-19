@@ -76,6 +76,18 @@ export class DuplicateError extends AppError {
   }
 }
 
+/**
+ * Удаление плана заблокировано FK-ограничением (23503) — на него ещё
+ * ссылаются subscriptions/payments. Плана без единой подписки/платежа за всё
+ * время почти не бывает, поэтому это ожидаемый путь для админ-панели, а не
+ * баг: вызывающий код должен показать понятное сообщение вместо 500.
+ */
+export class PlanInUseError extends AppError {
+  constructor(id: string) {
+    super(`Plan is referenced by existing subscriptions or payments: ${id}`, 'PLAN_IN_USE', 409);
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

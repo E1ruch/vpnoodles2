@@ -49,7 +49,12 @@ export interface IPlanRepository {
   findById(id: string): Promise<Plan | null>;
   findByType(type: PlanType): Promise<Plan[]>;
   findActive(): Promise<Plan[]>;
+  /** Все планы (включая неактивные), отсортированные по sortOrder — для веб-админки. */
+  findAll(): Promise<Plan[]>;
   create(plan: Partial<Plan>): Promise<Plan>;
+  update(id: string, data: Partial<Plan>): Promise<Plan>;
+  /** Бросает PlanInUseError, если на план ещё ссылаются subscriptions/payments (FK 23503). */
+  delete(id: string): Promise<void>;
 }
 
 export interface ISubscriptionRepository {
@@ -67,6 +72,8 @@ export interface ISubscriptionRepository {
    * Один запрос вместо findByUserId() на каждого пользователя по отдельности.
    */
   findUserIdsWithSubscriptions(userIds: string[]): Promise<Set<string>>;
+  /** Кол-во активных подписок по каждому planId — для статистики на странице планов в веб-админке. */
+  countActiveByPlan(): Promise<Array<{ planId: string; count: number }>>;
 }
 
 export interface RevenueBreakdownEntry {

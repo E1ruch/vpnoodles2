@@ -76,4 +76,16 @@ export class SubscriptionRepository implements ISubscriptionRepository {
       .getRawMany<{ userId: string }>();
     return new Set(rows.map((row) => row.userId));
   }
+
+  async countActiveByPlan(): Promise<Array<{ planId: string; count: number }>> {
+    const repo = await this.getRepo();
+    const rows = await repo
+      .createQueryBuilder('s')
+      .select('s.planId', 'planId')
+      .addSelect('COUNT(*)', 'count')
+      .where('s.status = :status', { status: 'active' })
+      .groupBy('s.planId')
+      .getRawMany<{ planId: string; count: string }>();
+    return rows.map((row) => ({ planId: row.planId, count: Number(row.count) }));
+  }
 }

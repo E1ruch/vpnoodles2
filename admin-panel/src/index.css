@@ -1263,3 +1263,120 @@ button[type='submit']:hover {
   stroke-width: 2;
   stroke-dasharray: 6 5;
 }
+
+/* ---------- plans ---------- */
+
+.plan-group {
+  margin-bottom: 8px;
+}
+.plan-group h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.plan-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-card.inactive {
+  opacity: 0.65;
+}
+.plan-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plan-card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plan-price {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-h);
+}
+.plan-subscribers {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.plan-subscribers strong {
+  color: var(--text-h);
+}
+.plan-card-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.badge-plan-trial {
+  background: var(--accent-cyan-bg);
+  color: var(--accent-cyan);
+}
+.badge-plan-paid {
+  background: var(--accent-violet-bg);
+  color: var(--accent-violet);
+}
+
+.plan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.plan-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.plan-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
+}
+.plan-form input,
+.plan-form select,
+.plan-form textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-h);
+}
+.plan-form textarea {
+  resize: vertical;
+  min-height: 50px;
+}
+.plan-form-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+.plan-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
