@@ -35,6 +35,40 @@ export function formatDate(date: Date): string {
   }).format(date);
 }
 
+/**
+ * Экранирует спецсимволы legacy Markdown (`parse_mode: 'Markdown'`) в данных,
+ * которые мы не контролируем (названия устройств/платформ из Remnawave HWID,
+ * имена пользователей и т.п.).
+ *
+ * Без этого один непарный `_`, `*`, `` ` `` или `[` в подставляемом значении
+ * ломает ВСЁ сообщение: Telegram отвечает 400 "can't parse entities", хендлер
+ * улетает в catch и пользователь видит «что-то пошло не так» вместо экрана.
+ * Экранируются ровно четыре символа — именно их перечисляет Bot API для
+ * legacy Markdown (в MarkdownV2 список шире, но мы его не используем).
+ */
+export function escapeMarkdown(text: string): string {
+  return text.replace(/([_*`[])/g, '\\$1');
+}
+
+/**
+ * Значение для вставки в inline-code (`` `...` ``) в legacy Markdown: внутри
+ * code-entity экранирование не работает, поэтому ломающие символы вырезаем.
+ */
+export function sanitizeMarkdownCode(text: string): string {
+  return text.replace(/[`\\]/g, '');
+}
+
+/**
+ * formatDate() для внешних дат-строк: Intl бросает RangeError на Invalid Date,
+ * а такие значения вполне прилетают из чужого API. Возвращает null вместо throw.
+ */
+export function formatDateSafe(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatDate(date);
+}
+
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
   return str.slice(0, maxLength - 3) + '...';

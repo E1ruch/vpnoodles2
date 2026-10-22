@@ -49,33 +49,10 @@ export function isAdmin(ctx: Context): boolean {
   return parseAdminIds(getEnv()).has(telegramId);
 }
 
-export function isMessageNotModifiedError(err: unknown): boolean {
-  const description =
-    err && typeof err === 'object' && 'description' in err
-      ? String((err as { description: unknown }).description)
-      : err instanceof Error
-        ? err.message
-        : String(err);
-  return description.includes('message is not modified');
-}
-
-export async function safeEditMessageText(
-  ctx: Context,
-  text: string,
-  extra?: Parameters<Context['editMessageText']>[1],
-): Promise<void> {
-  try {
-    await ctx.editMessageText(text, extra);
-  } catch (err) {
-    if (isMessageNotModifiedError(err)) {
-      if (ctx.callbackQuery) {
-        await ctx.answerCbQuery().catch(() => undefined);
-      }
-      return;
-    }
-    throw err;
-  }
-}
+// isMessageNotModifiedError/safeEditMessageText переехали в ../messageEdit.ts
+// (их переиспользуют и пользовательские хендлеры); реэкспорт — чтобы не менять
+// импорты всех админских модулей.
+export { isMessageNotModifiedError, safeEditMessageText } from '../messageEdit.js';
 
 export function parsePage(ctx: Context, fallback = 0): number {
   const cbData = ctx.callbackQuery;

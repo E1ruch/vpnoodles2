@@ -236,17 +236,25 @@ export function referralProgramKeyboard(referralLink: string): InlineKeyboardMar
   };
 }
 
-export function devicesKeyboard(
-  deviceCount: number,
-  showDeleteButtons: boolean,
-): InlineKeyboardMarkup {
+/**
+ * callback_data кнопок удаления — `del_dev_<индекс>_<токен hwid>`.
+ * Токен (см. deviceToken() в user/DeviceHandlers.ts) нужен, потому что одного
+ * индекса недостаточно: между отрисовкой списка и нажатием кнопки порядок
+ * устройств может измениться (или пользователь нажмёт кнопку в старом
+ * сообщении) — и удалилось бы не то устройство. Индекс оставлен для быстрого
+ * попадания и обратной совместимости со старыми сообщениями без токена.
+ */
+export function devicesKeyboard(deviceTokens: readonly string[] = []): InlineKeyboardMarkup {
   const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
 
-  if (showDeleteButtons && deviceCount > 0) {
-    for (let i = 0; i < deviceCount; i++) {
-      buttons.push([{ text: `🗑 Удалить устройство ${i + 1}`, callback_data: `del_dev_${i}` }]);
-    }
-  }
+  deviceTokens.forEach((token, index) => {
+    buttons.push([
+      {
+        text: `🗑 Удалить устройство ${index + 1}`,
+        callback_data: `del_dev_${index}_${token}`,
+      },
+    ]);
+  });
 
   buttons.push([{ text: 'Назад в профиль', callback_data: 'profile' }]);
   buttons.push([{ text: 'В главное меню', callback_data: 'back_main' }]);
@@ -254,10 +262,13 @@ export function devicesKeyboard(
   return { inline_keyboard: buttons };
 }
 
-export function deleteDeviceConfirmKeyboard(deviceIndex: number): InlineKeyboardMarkup {
+export function deleteDeviceConfirmKeyboard(
+  deviceIndex: number,
+  deviceToken: string,
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
-      [{ text: '✅ Да, удалить', callback_data: `confirm_del_dev_${deviceIndex}` }],
+      [{ text: '✅ Да, удалить', callback_data: `confirm_del_dev_${deviceIndex}_${deviceToken}` }],
       [{ text: 'Отмена', callback_data: 'devices' }],
     ],
   };

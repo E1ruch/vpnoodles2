@@ -35,7 +35,29 @@ export class GetUserDevicesUseCase {
       subscriptionId: subscription.id,
       deviceLimit: subscription.deviceLimit,
       total,
-      devices,
+      devices: sortDevices(devices),
     };
   }
+}
+
+/**
+ * Remnawave не гарантирует порядок устройств в ответе, а кнопки удаления в боте
+ * нумеруются позицией в списке — поэтому порядок фиксируем сами: по дате
+ * подключения, с hwid как тай-брейкером. Без этого «Удалить устройство 2»
+ * могло указать на другое устройство при следующем запросе списка.
+ */
+function sortDevices(devices: readonly HwidDevice[]): HwidDevice[] {
+  return [...devices].sort((a, b) => {
+    const left = toTime(a.createdAt);
+    const right = toTime(b.createdAt);
+    if (left !== right) return left - right;
+    return a.hwid.localeCompare(b.hwid);
+  });
+}
+
+/** Невалидные/отсутствующие даты уезжают в конец списка, а не ломают сортировку. */
+function toTime(value: string | null | undefined): number {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
 }
