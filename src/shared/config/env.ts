@@ -37,6 +37,11 @@ const envSchema = z.object({
   REMNAWAVE_API_KEY: z.string().min(1),
   REMNAWAVE_TIMEOUT_MS: z.coerce.number().default(10000),
   REMNAWAVE_DEFAULT_SQUAD: z.string().default(''),
+  /**
+   * UUID дополнительного internal squad (например, CDN), который выдаётся только при
+   * оплате подписки — поверх REMNAWAVE_DEFAULT_SQUAD. Пусто — оплата squads не трогает.
+   */
+  REMNAWAVE_PAID_SQUAD: z.string().default(''),
   /** TTL кэша статуса подписки (getUserSubscriptionState) в Redis, сек. 0 — кэш выключен. */
   REMNAWAVE_STATE_CACHE_TTL_SECONDS: z.coerce.number().default(10),
 

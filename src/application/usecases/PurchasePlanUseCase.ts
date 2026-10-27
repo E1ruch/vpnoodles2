@@ -238,6 +238,12 @@ export class PurchasePlanUseCase {
       }
     }
 
+    // Платный squad (CDN) — после фиксации remnawaveUserId на платеже, а не внутри блока
+    // мутации выше: если бы addUserSquads упал до paymentRepo.update, retry повторил бы
+    // неидемпотентный extendUser. Сам addUserSquads идемпотентен, поэтому выполняется и
+    // на retry-пути — заодно добивает squad, если в прошлый раз он не проставился.
+    await this.grantPaidSquads(remnawaveUserId);
+
     let subscriptionId: string;
     let subscriptionUrl: string;
 
@@ -318,6 +324,24 @@ export class PurchasePlanUseCase {
 
     logger.info({ userId, subscriptionId, planId }, 'Plan purchased');
     return { subscriptionId, subscriptionUrl, qrCodeBase64 };
+  }
+
+  /**
+   * Добавляет оплаченной подписке REMNAWAVE_PAID_SQUAD (вместе с REMNAWAVE_DEFAULT_SQUAD).
+   * Не задан — ничего не делаем, поведение как до появления платного squad. Best-effort:
+   * сбой не должен ронять уже оплаченную и выданную подписку — базовый доступ у
+   * пользователя уже есть, squad добьётся при следующей покупке/продлении.
+   */
+  private async grantPaidSquads(remnawaveUserId: string): Promise<void> {
+    const env = getEnv();
+    if (!env.REMNAWAVE_PAID_SQUAD) return;
+
+    const squads = [env.REMNAWAVE_DEFAULT_SQUAD, env.REMNAWAVE_PAID_SQUAD].filter(Boolean);
+    try {
+      await this.remnawaveService.addUserSquads(remnawaveUserId, squads);
+    } catch (err) {
+      getLogger().error({ err, remnawaveUserId, squads }, 'Failed to grant paid squads');
+    }
   }
 
   private async buildPurchaseResultFromActiveSubscription(

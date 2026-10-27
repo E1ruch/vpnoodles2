@@ -241,6 +241,57 @@ describe('RemnawaveClient — patchUser (GET-modify-PATCH helper)', () => {
       expireAt: expireAt.toISOString(),
     });
   });
+
+  it('addUserSquads: appends missing squads, keeps existing ones and all other fields', async () => {
+    const { fetchMock, getPatchBody } = mockFetch();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const client = new RemnawaveClient(createFakeCache());
+
+    await client.addUserSquads('rw-1', ['squad-1', 'squad-cdn']);
+
+    expect(getPatchBody()).toEqual({
+      ...baseFields,
+      status: 'ACTIVE',
+      expireAt: currentUserFixture.expireAt,
+      tag: 'PAID',
+      hwidDeviceLimit: 3,
+      activeInternalSquads: ['squad-1', 'squad-cdn'],
+    });
+  });
+
+  it('addUserSquads: normalizes object-shaped squads from the panel before merging', async () => {
+    const { fetchMock, getPatchBody } = mockFetch({
+      ...currentUserFixture,
+      activeInternalSquads: [{ uuid: 'squad-1', name: 'Default' }],
+    });
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const client = new RemnawaveClient(createFakeCache());
+
+    await client.addUserSquads('rw-1', ['squad-cdn']);
+
+    expect(getPatchBody()?.['activeInternalSquads']).toEqual(['squad-1', 'squad-cdn']);
+  });
+
+  it('addUserSquads: no PATCH when the user already has every requested squad', async () => {
+    const { fetchMock, getPatchBody } = mockFetch();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const client = new RemnawaveClient(createFakeCache());
+
+    await client.addUserSquads('rw-1', ['squad-1']);
+
+    expect(getPatchBody()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // только GET
+  });
+
+  it('addUserSquads: no network calls at all for an empty list', async () => {
+    const { fetchMock } = mockFetch();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const client = new RemnawaveClient(createFakeCache());
+
+    await client.addUserSquads('rw-1', ['']);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('RemnawaveClient — getUserSubscriptionState cache', () => {

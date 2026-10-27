@@ -306,6 +306,27 @@ export class RemnawaveClient implements IRemnawaveService {
     logger.info({ remnawaveUserId, options }, 'User upgraded to paid plan');
   }
 
+  async addUserSquads(remnawaveUserId: string, squadUuids: string[]): Promise<void> {
+    const logger = getLogger();
+    const requested = squadUuids.filter(Boolean);
+    if (requested.length === 0) return;
+
+    const currentSquads = this.normalizeInternalSquads(
+      (await this.withRetry(() => this.getUser(remnawaveUserId))).activeInternalSquads,
+    );
+    const missing = requested.filter((uuid) => !currentSquads.includes(uuid));
+    if (missing.length === 0) return;
+
+    logger.info({ remnawaveUserId, squads: missing }, 'Adding internal squads to user');
+    // Объединяем с актуальным списком внутри patchUser (свежий GET), а не с тем, что
+    // прочитали выше, — чтобы не затереть squads, добавленные между двумя запросами.
+    await this.patchUser(remnawaveUserId, (currentUser) => {
+      const squads = this.normalizeInternalSquads(currentUser.activeInternalSquads);
+      return { activeInternalSquads: [...new Set([...squads, ...requested])] };
+    });
+    logger.info({ remnawaveUserId, squads: missing }, 'Internal squads added to user');
+  }
+
   /**
    * Читается на каждый показ "Мой VPN", в напоминаниях об окончании подписки и в
    * синхронизации с Remnawave — самый горячий путь чтения панели. Кэшируем в Redis на

@@ -38,6 +38,11 @@ export interface IRemnawaveService {
       expireAt: Date;
     },
   ): Promise<void>;
+  /**
+   * Добавляет internal squads пользователю (объединение с текущими, ничего не снимает).
+   * Если все squads уже есть — PATCH не отправляется.
+   */
+  addUserSquads(remnawaveUserId: string, squadUuids: string[]): Promise<void>;
   /** GET /api/users/{uuid} → expireAt и статус для зеркала в БД. */
   getUserSubscriptionState(
     remnawaveUserUuid: string,

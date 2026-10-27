@@ -1,5 +1,6 @@
 import { PurchasePlanUseCase } from '../../src/application/usecases/PurchasePlanUseCase';
 import { PaymentLockedError } from '../../src/shared/errors/index';
+import * as envModule from '../../src/shared/config/env';
 
 // Регрессионные тесты на фикс гонки: YooKassa webhook и polling-тик (или два
 // перекрывшихся тика) могли одновременно вызвать execute() для одного и того же
@@ -40,6 +41,7 @@ const mockRemnawaveService = {
   updateDeviceLimit: jest.fn(),
   getUserExpireAt: jest.fn(),
   getSubscriptionUrl: jest.fn(),
+  addUserSquads: jest.fn(),
 };
 
 const mockPaymentService = {
@@ -233,6 +235,163 @@ describe('PurchasePlanUseCase — fulfillment lock', () => {
       expect(mockPaymentRepo.update).not.toHaveBeenCalled();
 
       // Остальной (идемпотентный) хвост фулфилмента всё равно должен отработать.
+      expect(result.subscriptionId).toBe('sub-1');
+      expect(mockPaymentService.markAsCompleted).toHaveBeenCalledWith('pay-1', 'yk-charge-1');
+    });
+  });
+
+  // Платный squad (CDN): выдаётся поверх дефолтного только при оплате и только если
+  // REMNAWAVE_PAID_SQUAD задан. Не задан — поведение как раньше, squads не трогаем.
+  describe('paid squad (REMNAWAVE_PAID_SQUAD)', () => {
+    const realEnv = envModule.getEnv();
+    let getEnvSpy: jest.SpyInstance;
+
+    function setSquadEnv(defaultSquad: string, paidSquad: string) {
+      getEnvSpy.mockReturnValue({
+        ...realEnv,
+        REMNAWAVE_DEFAULT_SQUAD: defaultSquad,
+        REMNAWAVE_PAID_SQUAD: paidSquad,
+      });
+    }
+
+    function pendingPayment(remnawaveUserId: string | null = null) {
+      return {
+        id: 'pay-1',
+        userId: 'user-1',
+        planId: 'plan-1',
+        provider: 'yookassa',
+        status: 'pending',
+        externalPaymentId: null,
+        remnawaveUserId,
+      };
+    }
+
+    beforeEach(() => {
+      getEnvSpy = jest.spyOn(envModule, 'getEnv');
+      mockPaymentService.acquireFulfillmentLock.mockResolvedValue(true);
+      mockUserRepo.findById.mockResolvedValue({ id: 'user-1', telegramId: 123, username: 'u' });
+      mockPlanRepo.findById.mockResolvedValue({
+        id: 'plan-1',
+        type: 'paid',
+        durationDays: 30,
+        deviceLimit: 3,
+        priceRub: 199,
+        priceStars: 0,
+      });
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue(null);
+      mockSubscriptionRepo.findByUserId.mockResolvedValue([]);
+      mockRemnawaveService.createUser.mockResolvedValue('rw-1');
+      mockRemnawaveService.upgradeUser.mockResolvedValue(undefined);
+      mockRemnawaveService.addUserSquads.mockResolvedValue(undefined);
+      mockRemnawaveService.getSubscriptionUrl.mockResolvedValue('https://sub.example.com/x');
+      mockSubscriptionRepo.create.mockResolvedValue({ id: 'sub-1' });
+      mockSubscriptionRepo.update.mockResolvedValue({});
+      mockPaymentService.markAsCompleted.mockResolvedValue({});
+      mockPaymentRepo.findById.mockResolvedValue(pendingPayment());
+    });
+
+    afterEach(() => {
+      getEnvSpy.mockRestore();
+    });
+
+    it('does not touch squads when REMNAWAVE_PAID_SQUAD is not set', async () => {
+      setSquadEnv('squad-default', '');
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.addUserSquads).not.toHaveBeenCalled();
+      // createUser по-прежнему получает только дефолтный squad.
+      expect(mockRemnawaveService.createUser.mock.calls[0][3]).toEqual(['squad-default']);
+    });
+
+    it('adds default + paid squads to a new paid user, after remnawaveUserId is persisted', async () => {
+      setSquadEnv('squad-default', 'squad-cdn');
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.addUserSquads).toHaveBeenCalledWith('rw-1', [
+        'squad-default',
+        'squad-cdn',
+      ]);
+      // Сбой addUserSquads до фиксации remnawaveUserId привёл бы к повторному
+      // (неидемпотентному) продлению на retry — поэтому он строго после.
+      const persistOrder = mockPaymentRepo.update.mock.invocationCallOrder[0] as number;
+      const squadOrder = mockRemnawaveService.addUserSquads.mock.invocationCallOrder[0] as number;
+      expect(persistOrder).toBeLessThan(squadOrder);
+    });
+
+    it('adds only the paid squad when no default squad is configured', async () => {
+      setSquadEnv('', 'squad-cdn');
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.addUserSquads).toHaveBeenCalledWith('rw-1', ['squad-cdn']);
+    });
+
+    it('adds the paid squad when upgrading a trial subscription', async () => {
+      setSquadEnv('squad-default', 'squad-cdn');
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-trial',
+        planId: 'plan-trial',
+        remnawaveUserId: 'rw-trial',
+        endDate: new Date(Date.now() + 86400000),
+      });
+      mockPlanRepo.findById.mockImplementation(async (id: string) =>
+        id === 'plan-trial'
+          ? { id: 'plan-trial', type: 'trial' }
+          : { id: 'plan-1', type: 'paid', durationDays: 30, deviceLimit: 3, priceRub: 199, priceStars: 0 },
+      );
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.upgradeUser).toHaveBeenCalledWith('rw-trial', expect.any(Object));
+      expect(mockRemnawaveService.addUserSquads).toHaveBeenCalledWith('rw-trial', [
+        'squad-default',
+        'squad-cdn',
+      ]);
+    });
+
+    it('adds the paid squad when renewing an active paid subscription', async () => {
+      setSquadEnv('squad-default', 'squad-cdn');
+      mockSubscriptionRepo.findActiveByUserId.mockResolvedValue({
+        id: 'sub-paid',
+        planId: 'plan-1',
+        remnawaveUserId: 'rw-paid',
+        endDate: new Date(Date.now() + 86400000),
+      });
+      mockRemnawaveService.getUserExpireAt.mockResolvedValue(new Date());
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.extendUser).toHaveBeenCalledWith('rw-paid', 30);
+      expect(mockRemnawaveService.addUserSquads).toHaveBeenCalledWith('rw-paid', [
+        'squad-default',
+        'squad-cdn',
+      ]);
+    });
+
+    it('still ensures the paid squad on retry when the Remnawave mutation is skipped', async () => {
+      setSquadEnv('squad-default', 'squad-cdn');
+      mockPaymentRepo.findById.mockResolvedValue(pendingPayment('rw-1'));
+
+      await useCase.execute('user-1', 'plan-1', 'yookassa', { existingPaymentId: 'pay-1' });
+
+      expect(mockRemnawaveService.createUser).not.toHaveBeenCalled();
+      expect(mockRemnawaveService.addUserSquads).toHaveBeenCalledWith('rw-1', [
+        'squad-default',
+        'squad-cdn',
+      ]);
+    });
+
+    it('does not fail the purchase when adding the paid squad fails', async () => {
+      setSquadEnv('squad-default', 'squad-cdn');
+      mockRemnawaveService.addUserSquads.mockRejectedValue(new Error('remnawave down'));
+
+      const result = await useCase.execute('user-1', 'plan-1', 'yookassa', {
+        existingPaymentId: 'pay-1',
+        externalChargeId: 'yk-charge-1',
+      });
+
       expect(result.subscriptionId).toBe('sub-1');
       expect(mockPaymentService.markAsCompleted).toHaveBeenCalledWith('pay-1', 'yk-charge-1');
     });
